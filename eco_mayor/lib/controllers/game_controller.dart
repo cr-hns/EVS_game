@@ -5,6 +5,7 @@ import '../models/building.dart';
 import '../models/advisor_message.dart';
 import '../simulation/turn_processor.dart';
 import '../data/buildings_data.dart';
+import '../data/map_generator.dart';
 
 class GameController extends ChangeNotifier {
   late CityState state;
@@ -36,16 +37,8 @@ class GameController extends ChangeNotifier {
   }
 
   void startNewGame(String name, String difficulty) {
-    // Generate 20x20 terrain (with river cutting through middle)
-    final grid = List.generate(20, (y) {
-      return List.generate(20, (x) {
-        if (x == 9 || x == 10) return 'water_clean';
-        if (x == 8 || x == 11) return 'sand';
-        return 'grass';
-      });
-    });
+    final map = MapGenerator.build(difficulty);
 
-    final prePlaced = <PlacedBuilding>[];
     int startFunds = 5000;
     int startGems = 10;
     PollutionMetrics initialMetrics = const PollutionMetrics(
@@ -64,15 +57,7 @@ class GameController extends ChangeNotifier {
         soilHealth: 65.0,
         noiseWaste: 40.0,
       );
-      prePlaced.add(const PlacedBuilding(id: 'c1', buildingTypeId: 'coal_plant', gridX: 4, gridY: 4));
-      prePlaced.add(const PlacedBuilding(id: 'h1', buildingTypeId: 'house', gridX: 13, gridY: 6));
-      prePlaced.add(const PlacedBuilding(id: 'h2', buildingTypeId: 'house', gridX: 14, gridY: 6));
-    } else if (difficulty == 'medium') {
-      prePlaced.add(const PlacedBuilding(id: 'c1', buildingTypeId: 'coal_plant', gridX: 3, gridY: 3));
-      prePlaced.add(const PlacedBuilding(id: 'f1', buildingTypeId: 'factory', gridX: 5, gridY: 6));
-      prePlaced.add(const PlacedBuilding(id: 'l1', buildingTypeId: 'landfill', gridX: 2, gridY: 14));
-      prePlaced.add(const PlacedBuilding(id: 'a1', buildingTypeId: 'apartment', gridX: 14, gridY: 5));
-    } else {
+    } else if (difficulty != 'medium') {
       // Hard
       startFunds = 3000;
       startGems = 5;
@@ -82,11 +67,6 @@ class GameController extends ChangeNotifier {
         soilHealth: 35.0,
         noiseWaste: 75.0,
       );
-      prePlaced.add(const PlacedBuilding(id: 'c1', buildingTypeId: 'coal_plant', gridX: 3, gridY: 3));
-      prePlaced.add(const PlacedBuilding(id: 'c2', buildingTypeId: 'coal_plant', gridX: 5, gridY: 3));
-      prePlaced.add(const PlacedBuilding(id: 'f1', buildingTypeId: 'factory', gridX: 3, gridY: 7));
-      prePlaced.add(const PlacedBuilding(id: 'o1', buildingTypeId: 'oil_refinery', gridX: 6, gridY: 10));
-      prePlaced.add(const PlacedBuilding(id: 'l1', buildingTypeId: 'landfill', gridX: 2, gridY: 15));
     }
 
     gameOutcome = null;
@@ -100,11 +80,13 @@ class GameController extends ChangeNotifier {
       turn: 1,
       funds: startFunds,
       gems: startGems,
-      population: 150,
+      // Everyone who lives in the starting town's homes.
+      population: map.buildings.fold<int>(
+          0, (sum, b) => sum + (BuildingsData.all[b.buildingTypeId]?.population ?? 0)),
       happiness: 60.0,
       metrics: initialMetrics,
-      buildings: prePlaced,
-      terrain: grid,
+      buildings: map.buildings,
+      terrain: map.terrain,
     );
     notifyListeners();
   }
@@ -124,6 +106,8 @@ class GameController extends ChangeNotifier {
   }
 
   static const int demolishCost = 50;
+  static const double forestClearAqi = 4.0;
+  static const double forestClearSoil = 3.0;
 
   /// Handles a tap on map cell (gridX, gridY): demolishes or places the
   /// selected building. Returns true if the city changed.
@@ -181,8 +165,13 @@ class GameController extends ChangeNotifier {
           showToast('That spot is taken', error: true);
           return false;
         }
-        if (state.terrain[ty][tx] == 'water_clean' && bType.id != 'water_treatment') {
+        final cell = state.terrain[ty][tx];
+        if (cell == Terrain.river && bType.id != 'water_treatment') {
           showToast("Can't build on the river", error: true);
+          return false;
+        }
+        if (Terrain.isBlocked(cell)) {
+          showToast("Can't build on a road", error: true);
           return false;
         }
       }
@@ -194,12 +183,39 @@ class GameController extends ChangeNotifier {
       gridX: gridX,
       gridY: gridY,
     );
+    // Building on forest clears it: an immediate hit to air and soil.
+    var cleared = 0;
+    final terrain = [for (final row in state.terrain) [...row]];
+    for (int y = 0; y < bType.height; y++) {
+      for (int x = 0; x < bType.width; x++) {
+        if (terrain[gridY + y][gridX + x] == Terrain.forest) {
+          terrain[gridY + y][gridX + x] = Terrain.grass;
+          cleared++;
+        }
+      }
+    }
+    final m = state.metrics;
     state = state.copyWith(
       funds: state.funds - bType.cost,
       gems: state.gems - bType.gemCost,
       buildings: [...state.buildings, placed],
+      terrain: terrain,
+      metrics: cleared == 0
+          ? m
+          : m.copyWith(
+              aqi: m.aqi + cleared * forestClearAqi,
+              soilHealth: m.soilHealth - cleared * forestClearSoil,
+            ),
     );
-    showToast('${bType.name} built  -\$${bType.cost}');
+    if (cleared > 0) {
+      showToast(
+        'Cut down $cleared forest tile${cleared == 1 ? '' : 's'}: '
+        'AQI +${(cleared * forestClearAqi).round()}, Soil -${(cleared * forestClearSoil).round()}',
+        error: true,
+      );
+    } else {
+      showToast('${bType.name} built  -\$${bType.cost}');
+    }
     return true;
   }
 

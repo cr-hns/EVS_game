@@ -5,6 +5,7 @@ import '../models/advisor_message.dart';
 import '../data/buildings_data.dart';
 import '../data/advisor_dialogues.dart';
 import '../utils/constants.dart';
+import '../data/map_generator.dart';
 
 class SimulationResult {
   final CityState nextState;
@@ -31,6 +32,12 @@ class SimulationResult {
 }
 
 class TurnProcessor {
+  // Daily effect of one forest tile (before the 0.35 dampening below).
+  static const double forestAqi = -0.5;
+  static const double forestWater = 0.2;
+  static const double forestSoil = 0.3;
+  static const double forestNoise = -0.3;
+
   static SimulationResult processTurn(CityState current) {
     // 1. Calculate Economy & Maintenance
     int netRevenue = 0;
@@ -65,6 +72,18 @@ class TurnProcessor {
         heavyPolluterCount++;
       }
     }
+
+    // Forests: trees absorb pollutants, hold soil, filter water, damp noise.
+    var forestTiles = 0;
+    for (final row in current.terrain) {
+      for (final cell in row) {
+        if (cell == Terrain.forest) forestTiles++;
+      }
+    }
+    netAqiDelta += forestTiles * forestAqi;
+    netWaterDelta += forestTiles * forestWater;
+    netSoilDelta += forestTiles * forestSoil;
+    netNoiseWasteDelta += forestTiles * forestNoise;
 
     // Taxes from population
     final taxIncome = (current.population * 0.5).round();

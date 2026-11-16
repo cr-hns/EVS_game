@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../controllers/game_controller.dart';
 import '../data/buildings_data.dart';
+import '../data/map_generator.dart';
+import 'terrain_painter.dart';
 import '../utils/constants.dart';
 
 /// Renders the 20x20 city map. Handles pan / pinch-zoom (touch), wheel zoom
@@ -200,19 +202,34 @@ class EcoMayorFlameGame extends FlameGame
 
     // 1. Terrain
     final waterBad = m.waterPurity < 40.0;
+    final painter = TerrainPainter(state.terrain, _tile);
     final soilBad = m.soilHealth < 40.0;
     for (int y = 0; y < GameConstants.gridRows; y++) {
       for (int x = 0; x < GameConstants.gridCols; x++) {
         final base = state.terrain[y][x];
-        var key = 'tiles/$base.png';
-        if (base == 'water_clean' && waterBad) key = 'tiles/water_polluted.png';
-        if (base == 'grass' && soilBad) key = 'tiles/grass_dead.png';
+        // Grass under everything except bare dirt.
+        var key = base == Terrain.dirt
+            ? 'tiles/dirt.png'
+            : (soilBad ? 'tiles/grass_dead.png' : 'tiles/grass.png');
         (_sprites[key] ?? _sprites['tiles/grass.png'])?.render(
           canvas,
           position: Vector2(x * _tile, y * _tile),
           size: Vector2.all(_tile + 0.5), // overlap hides seams when zoomed
           overridePaint: _spritePaint,
         );
+        if (base == Terrain.river) {
+          painter.paintRiver(canvas, x, y, polluted: waterBad, time: _time);
+        } else if (base == Terrain.road) {
+          painter.paintRoad(canvas, x, y);
+        }
+      }
+    }
+    // Trees last so their crowns overlap neighbouring tiles a little.
+    for (int y = 0; y < GameConstants.gridRows; y++) {
+      for (int x = 0; x < GameConstants.gridCols; x++) {
+        if (state.terrain[y][x] == Terrain.forest) {
+          painter.paintForest(canvas, x, y, dead: soilBad);
+        }
       }
     }
 
@@ -267,7 +284,8 @@ class EcoMayorFlameGame extends FlameGame
         for (int y = 0; y < h && ok; y++) {
           for (int x = 0; x < w && ok; x++) {
             if (state.isCellOccupied(gx + x, gy + y) ||
-                (state.terrain[gy + y][gx + x] == 'water_clean' && b.id != 'water_treatment')) {
+                Terrain.isBlocked(state.terrain[gy + y][gx + x]) ||
+                (state.terrain[gy + y][gx + x] == Terrain.river && b.id != 'water_treatment')) {
               ok = false;
             }
           }
