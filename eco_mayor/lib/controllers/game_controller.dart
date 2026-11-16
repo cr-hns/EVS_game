@@ -18,6 +18,19 @@ class GameController extends ChangeNotifier {
   SimulationResult? gameOutcome;
   bool get isGameOver => gameOutcome != null;
 
+  /// Short on-screen message (e.g. why a placement failed). [toastId] changes
+  /// every time so the UI can restart its fade animation.
+  String? toast;
+  bool toastIsError = false;
+  int toastId = 0;
+
+  void showToast(String message, {bool error = false}) {
+    toast = message;
+    toastIsError = error;
+    toastId++;
+    notifyListeners();
+  }
+
   GameController() {
     startNewGame('Eco City', 'medium');
   }
@@ -97,22 +110,28 @@ class GameController extends ChangeNotifier {
   }
 
   void selectBuilding(BuildingType? type) {
-    selectedBuilding = type;
+    selectedBuilding = selectedBuilding?.id == type?.id ? null : type;
+    activeAdvisorDialog = null;
     isDemolishMode = false;
     notifyListeners();
   }
 
   void toggleDemolish() {
     isDemolishMode = !isDemolishMode;
+    activeAdvisorDialog = null;
     selectedBuilding = null;
     notifyListeners();
   }
 
+  static const int demolishCost = 50;
+
+  /// Handles a tap on map cell (gridX, gridY): demolishes or places the
+  /// selected building. Returns true if the city changed.
   bool placeBuildingAt(int gridX, int gridY) {
     if (isGameOver) return false;
+
     if (isDemolishMode) {
-      // Find building that covers this cell
-      PlacedBuilding? toRemove;
+      PlacedBuilding? target;
       for (final b in state.buildings) {
         final type = BuildingsData.all[b.buildingTypeId];
         if (type == null) continue;
@@ -120,58 +139,67 @@ class GameController extends ChangeNotifier {
             gridX < b.gridX + type.width &&
             gridY >= b.gridY &&
             gridY < b.gridY + type.height) {
-          toRemove = b;
+          target = b;
           break;
         }
       }
-      if (toRemove != null) {
-        final newBuildings = List<PlacedBuilding>.from(state.buildings)..remove(toRemove);
-        state = state.copyWith(
-          funds: state.funds - 50, // demolition fee
-          buildings: newBuildings,
-        );
-        notifyListeners();
-        return true;
+      if (target == null) {
+        showToast('Nothing to demolish here', error: true);
+        return false;
       }
-      return false;
+      if (state.funds < demolishCost) {
+        showToast('Demolition costs \$$demolishCost', error: true);
+        return false;
+      }
+      final name = BuildingsData.all[target.buildingTypeId]?.name ?? 'Building';
+      final kept = state.buildings.where((b) => b.id != target!.id).toList();
+      state = state.copyWith(funds: state.funds - demolishCost, buildings: kept);
+      showToast('$name demolished  -\$$demolishCost');
+      return true;
     }
 
-    if (selectedBuilding == null) return false;
-    final bType = selectedBuilding!;
+    final bType = selectedBuilding;
+    if (bType == null) return false;
 
-    // Boundary check
-    if (gridX + bType.width > 20 || gridY + bType.height > 20) return false;
-
-    // Affordability check
-    if (!state.canAfford(bType)) return false;
-
-    // Collision check
+    if (gridX + bType.width > 20 || gridY + bType.height > 20) {
+      showToast('Not enough room at the map edge', error: true);
+      return false;
+    }
+    if (state.funds < bType.cost) {
+      showToast('Need \$${bType.cost - state.funds} more', error: true);
+      return false;
+    }
+    if (state.gems < bType.gemCost) {
+      showToast('Need ${bType.gemCost - state.gems} more Eco-Gems', error: true);
+      return false;
+    }
     for (int y = 0; y < bType.height; y++) {
       for (int x = 0; x < bType.width; x++) {
-        final targetX = gridX + x;
-        final targetY = gridY + y;
-        if (state.isCellOccupied(targetX, targetY)) return false;
-        // Don't build directly on water unless water treatment
-        if (state.terrain[targetY][targetX] == 'water_clean' && bType.id != 'water_treatment') {
+        final tx = gridX + x;
+        final ty = gridY + y;
+        if (state.isCellOccupied(tx, ty)) {
+          showToast('That spot is taken', error: true);
+          return false;
+        }
+        if (state.terrain[ty][tx] == 'water_clean' && bType.id != 'water_treatment') {
+          showToast("Can't build on the river", error: true);
           return false;
         }
       }
     }
 
     final placed = PlacedBuilding(
-      id: 'b_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'b_${DateTime.now().microsecondsSinceEpoch}',
       buildingTypeId: bType.id,
       gridX: gridX,
       gridY: gridY,
     );
-
-    final newBuildings = List<PlacedBuilding>.from(state.buildings)..add(placed);
     state = state.copyWith(
       funds: state.funds - bType.cost,
       gems: state.gems - bType.gemCost,
-      buildings: newBuildings,
+      buildings: [...state.buildings, placed],
     );
-    notifyListeners();
+    showToast('${bType.name} built  -\$${bType.cost}');
     return true;
   }
 

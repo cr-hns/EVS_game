@@ -1,31 +1,54 @@
-import 'package:flame/game.dart';
-import 'package:flame/events.dart';
+import 'dart:math' as math;
+
 import 'package:flame/components.dart';
+import 'package:flame/events.dart';
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+
 import '../controllers/game_controller.dart';
 import '../data/buildings_data.dart';
 import '../utils/constants.dart';
 
-class EcoMayorFlameGame extends FlameGame with TapCallbacks, PanDetector {
+/// Renders the 20x20 city map. Handles pan / pinch-zoom (touch), wheel zoom
+/// and hover preview (mouse), and turns taps into build / demolish actions.
+class EcoMayorFlameGame extends FlameGame
+    with TapCallbacks, ScaleDetector, ScrollDetector, MouseMovementDetector {
   final GameController controller;
-  late Vector2 mapOffset;
-  double zoom = 1.0;
-
-  // Cached Sprites
-  final Map<String, Sprite> _spriteCache = {};
 
   EcoMayorFlameGame({required this.controller});
 
+  // Camera
+  Vector2 mapOffset = Vector2.zero();
+  double zoom = 1.0;
+  double _minZoom = 0.5;
+  double _maxZoom = 4.0;
+  bool _fitted = false;
+  bool _userMoved = false; // once true, never auto-refit the camera
+
+  // Screen space covered by HUD panels, so the map fits between them.
+  double topInset = 0;
+  double bottomInset = 0;
+
+  // Gesture state
+  double _zoomAtGestureStart = 1.0;
+
+  // Mouse hover cell for build preview (desktop only)
+  math.Point<int>? _hoverCell;
+
+  double _time = 0;
+  final Map<String, Sprite> _sprites = {};
+  final Paint _spritePaint = Paint()..filterQuality = FilterQuality.medium;
+
+  static const double _tile = GameConstants.tileSize;
+  static const double _mapPx = _tile * GameConstants.gridCols;
+
   @override
-  Color backgroundColor() => const Color(0xFF1E242B);
+  Color backgroundColor() => const Color(0xFF16231A);
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    mapOffset = Vector2(20, 40);
-
-    // Preload terrain sprites
-    final terrainKeys = [
+    const terrain = [
       'tiles/grass.png',
       'tiles/grass_dead.png',
       'tiles/dirt.png',
@@ -34,89 +57,267 @@ class EcoMayorFlameGame extends FlameGame with TapCallbacks, PanDetector {
       'tiles/sand.png',
       'tiles/concrete.png',
     ];
-    for (final key in terrainKeys) {
-      _spriteCache[key] = await loadSprite(key);
+    for (final key in terrain) {
+      _sprites[key] = await loadSprite(key);
     }
-
-    // Preload buildings
     for (final b in BuildingsData.all.values) {
-      _spriteCache[b.spritePath] = await loadSprite(b.spritePath);
+      _sprites[b.spritePath] = await loadSprite(b.spritePath);
     }
   }
 
+  // ---------------------------------------------------------------- camera
+
+  void setInsets({required double top, required double bottom}) {
+    final changed = top != topInset || bottom != bottomInset;
+    topInset = top;
+    bottomInset = bottom;
+    if (changed && _fitted && !_userMoved) fitToScreen();
+  }
+
+  void fitToScreen() {
+    final availW = size.x - 16;
+    final availH = size.y - topInset - bottomInset - 16;
+    if (availW <= 0 || availH <= 0) return;
+    final fit = math.min(availW / _mapPx, availH / _mapPx);
+    _minZoom = fit * 0.8;
+    _maxZoom = fit * 4;
+    zoom = fit;
+    mapOffset = Vector2(
+      (size.x - _mapPx * zoom) / 2,
+      topInset + (availH + 16 - _mapPx * zoom) / 2,
+    );
+    _fitted = true;
+  }
+
   @override
-  void onPanUpdate(DragUpdateInfo info) {
+  void onGameResize(Vector2 size) {
+    super.onGameResize(size);
+    if (_userMoved) {
+      _clampPan();
+    } else {
+      fitToScreen();
+    }
+  }
+
+  void _zoomAround(Vector2 focus, double newZoom) {
+    newZoom = newZoom.clamp(_minZoom, _maxZoom);
+    final world = (focus - mapOffset) / zoom;
+    zoom = newZoom;
+    mapOffset = focus - world * zoom;
+    _clampPan();
+  }
+
+  void _clampPan() {
+    // Keep at least a quarter of the map on screen.
+    final mapW = _mapPx * zoom;
+    final keep = mapW * 0.25;
+    mapOffset.x = mapOffset.x.clamp(keep - mapW, size.x - keep);
+    mapOffset.y = mapOffset.y.clamp(topInset + keep - mapW, size.y - bottomInset - keep);
+  }
+
+  @override
+  void onScaleStart(ScaleStartInfo info) {
+    _zoomAtGestureStart = zoom;
+  }
+
+  @override
+  void onScaleUpdate(ScaleUpdateInfo info) {
+    _userMoved = true;
+    final scale = info.raw.scale;
+    if ((scale - 1).abs() > 0.01) {
+      _zoomAround(info.eventPosition.widget, _zoomAtGestureStart * scale);
+    }
     mapOffset += info.delta.global;
+    _clampPan();
   }
 
   @override
-  void onTapDown(TapDownEvent event) {
-    final localX = (event.localPosition.x - mapOffset.x) / (GameConstants.tileSize * zoom);
-    final localY = (event.localPosition.y - mapOffset.y) / (GameConstants.tileSize * zoom);
+  void onScroll(PointerScrollInfo info) {
+    _userMoved = true;
+    final dy = info.scrollDelta.global.y;
+    _zoomAround(info.eventPosition.widget, zoom * (dy > 0 ? 0.9 : 1.1));
+  }
 
-    if (localX >= 0 && localX < GameConstants.gridCols && localY >= 0 && localY < GameConstants.gridRows) {
-      final gridX = localX.floor();
-      final gridY = localY.floor();
-      controller.placeBuildingAt(gridX, gridY);
+  // ---------------------------------------------------------------- input
+
+  math.Point<int>? _cellAt(Vector2 screen) {
+    final lx = (screen.x - mapOffset.x) / (_tile * zoom);
+    final ly = (screen.y - mapOffset.y) / (_tile * zoom);
+    if (lx < 0 || ly < 0 || lx >= GameConstants.gridCols || ly >= GameConstants.gridRows) {
+      return null;
     }
+    return math.Point(lx.floor(), ly.floor());
+  }
+
+  @override
+  void onTapUp(TapUpEvent event) {
+    final cell = _cellAt(event.canvasPosition);
+    if (cell == null) return;
+    final b = controller.selectedBuilding;
+    if (b != null && !controller.isDemolishMode) {
+      // Centre multi-tile buildings on the tapped cell.
+      final gx = (cell.x - (b.width - 1) ~/ 2).clamp(0, GameConstants.gridCols - b.width);
+      final gy = (cell.y - (b.height - 1) ~/ 2).clamp(0, GameConstants.gridRows - b.height);
+      controller.placeBuildingAt(gx, gy);
+    } else {
+      controller.placeBuildingAt(cell.x, cell.y);
+    }
+  }
+
+  @override
+  void onMouseMove(PointerHoverInfo info) {
+    _hoverCell = _cellAt(info.eventPosition.widget);
+  }
+
+  // ---------------------------------------------------------------- render
+
+  @override
+  void update(double dt) {
+    super.update(dt);
+    _time += dt;
   }
 
   @override
   void render(Canvas canvas) {
     super.render(canvas);
+    final state = controller.state;
+    final m = state.metrics;
+
     canvas.save();
     canvas.translate(mapOffset.x, mapOffset.y);
     canvas.scale(zoom);
 
-    final tileSize = GameConstants.tileSize;
+    // Map frame + drop shadow so the board reads as a game board.
+    final board = Rect.fromLTWH(0, 0, _mapPx, _mapPx);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(board.shift(const Offset(0, 6)).inflate(4), const Radius.circular(6)),
+      Paint()..color = const Color(0x99000000),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(board.inflate(4), const Radius.circular(6)),
+      Paint()..color = const Color(0xFF120D09),
+    );
 
-    // 1. Render Terrain Tiles
-    final isWaterPolluted = controller.state.metrics.waterPurity < 40.0;
-    final isSoilDead = controller.state.metrics.soilHealth < 40.0;
-
+    // 1. Terrain
+    final waterBad = m.waterPurity < 40.0;
+    final soilBad = m.soilHealth < 40.0;
     for (int y = 0; y < GameConstants.gridRows; y++) {
       for (int x = 0; x < GameConstants.gridCols; x++) {
-        String baseTile = controller.state.terrain[y][x];
-        String assetPath = 'tiles/$baseTile.png';
-
-        if (baseTile == 'water_clean' && isWaterPolluted) {
-          assetPath = 'tiles/water_polluted.png';
-        } else if (baseTile == 'grass' && isSoilDead) {
-          assetPath = 'tiles/grass_dead.png';
-        }
-
-        final sprite = _spriteCache[assetPath] ?? _spriteCache['tiles/grass.png'];
-        sprite?.render(
+        final base = state.terrain[y][x];
+        var key = 'tiles/$base.png';
+        if (base == 'water_clean' && waterBad) key = 'tiles/water_polluted.png';
+        if (base == 'grass' && soilBad) key = 'tiles/grass_dead.png';
+        (_sprites[key] ?? _sprites['tiles/grass.png'])?.render(
           canvas,
-          position: Vector2(x * tileSize, y * tileSize),
-          size: Vector2(tileSize, tileSize),
+          position: Vector2(x * _tile, y * _tile),
+          size: Vector2.all(_tile + 0.5), // overlap hides seams when zoomed
+          overridePaint: _spritePaint,
         );
       }
     }
 
-    // 2. Render Placed Buildings
-    for (final placed in controller.state.buildings) {
-      final type = BuildingsData.all[placed.buildingTypeId];
-      if (type == null) continue;
+    // Build-mode grid
+    final building = controller.selectedBuilding != null || controller.isDemolishMode;
+    if (building) {
+      final grid = Paint()
+        ..color = const Color(0x33FFFFFF)
+        ..strokeWidth = 0.6 / zoom.clamp(0.5, 2);
+      for (int i = 0; i <= GameConstants.gridCols; i++) {
+        canvas.drawLine(Offset(i * _tile, 0), Offset(i * _tile, _mapPx), grid);
+        canvas.drawLine(Offset(0, i * _tile), Offset(_mapPx, i * _tile), grid);
+      }
+    }
 
-      final sprite = _spriteCache[type.spritePath];
-      sprite?.render(
+    // 2. Buildings (with a soft shadow), sorted top-to-bottom
+    final placed = [...state.buildings]..sort((a, b) => a.gridY.compareTo(b.gridY));
+    final shadow = Paint()..color = const Color(0x55000000);
+    for (final p in placed) {
+      final t = BuildingsData.all[p.buildingTypeId];
+      if (t == null) continue;
+      final r = Rect.fromLTWH(p.gridX * _tile, p.gridY * _tile, t.width * _tile, t.height * _tile);
+      canvas.drawRect(r.shift(const Offset(2, 2.5)), shadow);
+      _sprites[t.spritePath]?.render(
         canvas,
-        position: Vector2(placed.gridX * tileSize, placed.gridY * tileSize),
-        size: Vector2(type.width * tileSize, type.height * tileSize),
+        position: Vector2(r.left, r.top),
+        size: Vector2(r.width, r.height),
+        overridePaint: _spritePaint,
       );
     }
 
-    // 3. Render Smog/Haze Overlay if AQI is high
-    if (controller.state.metrics.aqi > 100.0) {
-      final smogAlpha = ((controller.state.metrics.aqi - 100) / 200).clamp(0.0, 0.5);
-      final smogPaint = Paint()..color = Color.fromRGBO(90, 80, 50, smogAlpha);
+    // 3. Smoke from polluters
+    for (final p in placed) {
+      if (p.buildingTypeId == 'coal_plant' ||
+          p.buildingTypeId == 'factory' ||
+          p.buildingTypeId == 'oil_refinery') {
+        _drawSmoke(canvas, Offset((p.gridX + 0.8) * _tile, (p.gridY + 0.5) * _tile), p.gridX * 7.0 + p.gridY);
+      }
+    }
+
+    // 4. Hover / placement preview (desktop)
+    final hc = _hoverCell;
+    if (hc != null && building) {
+      final b = controller.selectedBuilding;
+      int w = 1, h = 1, gx = hc.x, gy = hc.y;
+      bool ok = true;
+      if (b != null && !controller.isDemolishMode) {
+        w = b.width;
+        h = b.height;
+        gx = (hc.x - (w - 1) ~/ 2).clamp(0, GameConstants.gridCols - w);
+        gy = (hc.y - (h - 1) ~/ 2).clamp(0, GameConstants.gridRows - h);
+        for (int y = 0; y < h && ok; y++) {
+          for (int x = 0; x < w && ok; x++) {
+            if (state.isCellOccupied(gx + x, gy + y) ||
+                (state.terrain[gy + y][gx + x] == 'water_clean' && b.id != 'water_treatment')) {
+              ok = false;
+            }
+          }
+        }
+        ok = ok && state.canAfford(b);
+        _sprites[b.spritePath]?.render(
+          canvas,
+          position: Vector2(gx * _tile, gy * _tile),
+          size: Vector2(w * _tile, h * _tile),
+          overridePaint: Paint()
+            ..filterQuality = FilterQuality.medium
+            ..color = const Color(0x99FFFFFF),
+        );
+      } else {
+        ok = state.isCellOccupied(gx, gy);
+      }
+      final rect = Rect.fromLTWH(gx * _tile, gy * _tile, w * _tile, h * _tile);
+      final col = controller.isDemolishMode
+          ? const Color(0xFFE5483B)
+          : (ok ? const Color(0xFF7CD34B) : const Color(0xFFE5483B));
+      canvas.drawRect(rect, Paint()..color = col.withValues(alpha: 0.25));
       canvas.drawRect(
-        Rect.fromLTWH(0, 0, GameConstants.gridCols * tileSize, GameConstants.gridRows * tileSize),
-        smogPaint,
+        rect,
+        Paint()
+          ..color = col
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
       );
+    }
+
+    // 5. Smog haze over the whole board when AQI is high
+    if (m.aqi > 100.0) {
+      final a = ((m.aqi - 100) / 200).clamp(0.0, 0.45);
+      canvas.drawRect(board, Paint()..color = Color.fromRGBO(110, 95, 55, a));
     }
 
     canvas.restore();
+  }
+
+  void _drawSmoke(Canvas canvas, Offset origin, double seed) {
+    const puffs = 4;
+    for (int i = 0; i < puffs; i++) {
+      final t = ((_time * 0.35 + i / puffs + seed * 0.13) % 1.0);
+      final pos = origin + Offset(math.sin((t + seed) * 6) * 3 + t * 6, -t * 26);
+      final radius = 3 + t * 7;
+      canvas.drawCircle(
+        pos,
+        radius,
+        Paint()..color = Color.fromRGBO(70, 66, 60, (1 - t) * 0.55),
+      );
+    }
   }
 }

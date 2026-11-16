@@ -1,8 +1,12 @@
-import 'package:flame/game.dart';
+import 'package:flame/game.dart' show GameWidget;
 import 'package:flutter/material.dart';
+
 import '../controllers/game_controller.dart';
-import '../game/eco_mayor_game.dart';
 import '../data/buildings_data.dart';
+import '../game/eco_mayor_game.dart';
+import '../models/building.dart';
+import '../models/city_state.dart';
+import '../ui/game_theme.dart';
 import '../utils/constants.dart';
 
 class GameplayScreen extends StatefulWidget {
@@ -15,335 +19,838 @@ class GameplayScreen extends StatefulWidget {
 }
 
 class _GameplayScreenState extends State<GameplayScreen> {
-  late EcoMayorFlameGame _game;
+  late final EcoMayorFlameGame _game;
+  final _topKey = GlobalKey();
+  final _bottomKey = GlobalKey();
+  BuildingCategory _tab = BuildingCategory.green;
+  double _topH = 110;
+  double _bottomH = 200;
+
+  GameController get c => widget.controller;
+
+  static const _tabs = [
+    (BuildingCategory.green, 'Green', 'ui/icon_soil.png'),
+    (BuildingCategory.residential, 'Homes', 'ui/icon_population.png'),
+    (BuildingCategory.infrastructure, 'Services', 'ui/icon_happiness.png'),
+    (BuildingCategory.industry, 'Industry', 'ui/icon_noise.png'),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _game = EcoMayorFlameGame(controller: widget.controller);
-    widget.controller.addListener(_onStateChange);
+    _game = EcoMayorFlameGame(controller: c);
+    c.addListener(_onChange);
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onStateChange);
+    c.removeListener(_onChange);
     super.dispose();
   }
 
-  void _onStateChange() {
-    setState(() {});
+  void _onChange() => setState(() {});
+
+  void _syncInsets() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final top = _topKey.currentContext?.size?.height ?? 0;
+      final bottom = _bottomKey.currentContext?.size?.height ?? 0;
+      final pad = MediaQuery.of(context).padding;
+      _game.setInsets(top: top + pad.top, bottom: bottom + pad.bottom + 8);
+      if ((top + pad.top - _topH).abs() > 1 ||
+          (bottom + pad.bottom + 8 - _bottomH).abs() > 1) {
+        setState(() {
+          _topH = top + pad.top;
+          _bottomH = bottom + pad.bottom + 8;
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = widget.controller.state;
-
+    _syncInsets();
+    final s = c.state;
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
+      backgroundColor: GameColors.mapBackdrop,
+      body: Stack(
+        children: [
+          Positioned.fill(child: GameWidget(game: _game)),
+
+          // Top HUD
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                key: _topKey,
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: _topHud(s),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Toast
+          if (c.toast != null)
+            Positioned(
+              top: _topH + 8,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _Toast(
+                  key: ValueKey(c.toastId),
+                  text: c.toast!,
+                  error: c.toastIsError,
+                ),
+              ),
+            ),
+
+          // Advisor
+          if (c.activeAdvisorDialog != null)
+            Positioned(
+              top: _topH + 8,
+              left: 8,
+              right: 8,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: _advisorBox(),
+                ),
+              ),
+            ),
+
+          // Bottom: info + build menu + actions
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 760),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (s.criticalDays > 0 && !c.isGameOver) ...[
+                          _collapseBanner(s.criticalDays),
+                          const SizedBox(height: 6),
+                        ],
+                        if (c.selectedBuilding != null) ...[
+                          _buildingInfo(c.selectedBuilding!),
+                          const SizedBox(height: 6),
+                        ],
+                        KeyedSubtree(key: _bottomKey, child: _buildMenu()),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          if (c.gameOutcome != null)
+            Positioned.fill(child: _outcomeOverlay(context)),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------ top HUD
+
+  Widget _topHud(CityState s) {
+    final m = s.metrics;
+    return GamePanel(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              _iconButton(
+                Icons.arrow_back_rounded,
+                () => Navigator.of(context).maybePop(),
+              ),
+              const SizedBox(width: 6),
+              GameSlot(
+                glow: s.infiniteMode ? GameColors.sky : null,
+                child: GameText(
+                  s.infiniteMode ? 'DAY ${s.turn}  ∞' : 'DAY ${s.turn}',
+                  size: 15,
+                  color: GameColors.gold,
+                ),
+              ),
+              const SizedBox(width: 6),
+              _counter(
+                'ui/icon_funds.png',
+                '${s.funds}',
+                GameColors.gold,
+                flex: 5,
+              ),
+              const SizedBox(width: 4),
+              _counter(
+                'ui/icon_gems.png',
+                '${s.gems}',
+                GameColors.leaf,
+                flex: 3,
+              ),
+              const SizedBox(width: 4),
+              _counter(
+                'ui/icon_population.png',
+                '${s.population}',
+                GameColors.sky,
+                flex: 4,
+              ),
+              const SizedBox(width: 4),
+              _counter(
+                'ui/icon_happiness.png',
+                '${s.happiness.round()}',
+                Colors.white,
+                flex: 4,
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              _meter(
+                'ui/icon_aqi.png',
+                'AIR',
+                m.aqi.toStringAsFixed(0),
+                1 - m.aqi / 300,
+              ),
+              const SizedBox(width: 6),
+              _meter(
+                'ui/icon_water.png',
+                'WATER',
+                '${m.waterPurity.round()}',
+                m.waterPurity / 100,
+              ),
+              const SizedBox(width: 6),
+              _meter(
+                'ui/icon_soil.png',
+                'SOIL',
+                '${m.soilHealth.round()}',
+                m.soilHealth / 100,
+              ),
+              const SizedBox(width: 6),
+              _meter(
+                'ui/icon_noise.png',
+                'WASTE',
+                m.noiseWaste.toStringAsFixed(0),
+                1 - m.noiseWaste / 100,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconButton(IconData icon, VoidCallback onTap) {
+    return GameButton(
+      onPressed: onTap,
+      color: GameColors.woodLight,
+      padding: const EdgeInsets.all(3),
+      child: Icon(icon, size: 18, color: GameColors.parchment),
+    );
+  }
+
+  Widget _counter(String icon, String value, Color color, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: GameSlot(
+        padding: const EdgeInsets.fromLTRB(3, 2, 4, 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // 1. Flame Game Canvas
-            Positioned.fill(
-              child: GameWidget(game: _game),
+            Image.asset(
+              'assets/images/$icon',
+              width: 18,
+              height: 18,
+              filterQuality: FilterQuality.medium,
             ),
-
-            // 2. Top HUD: Pollution Gauges & Currencies
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                color: Colors.black.withOpacity(0.75),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${state.cityName} (Turn ${state.turn})${state.infiniteMode ? '  ∞' : ''}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        Row(
-                          children: [
-                            const Text('💰', style: TextStyle(fontSize: 12)),
-                            const SizedBox(width: 3),
-                            Text('\$${state.funds}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)),
-                            const SizedBox(width: 8),
-                            const Text('💎', style: TextStyle(fontSize: 12)),
-                            const SizedBox(width: 3),
-                            Text('${state.gems}', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                            const SizedBox(width: 8),
-                            const Text('👥', style: TextStyle(fontSize: 12)),
-                            const SizedBox(width: 3),
-                            Text('${state.population}', style: const TextStyle(color: Colors.lightBlueAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        _metricBadge('AQI', state.metrics.aqi.toStringAsFixed(0), state.metrics.aqi < 50 ? Colors.green : (state.metrics.aqi < 120 ? Colors.amber : Colors.red)),
-                        const SizedBox(width: 4),
-                        _metricBadge('Water', '${state.metrics.waterPurity.toStringAsFixed(0)}%', state.metrics.waterPurity > 75 ? Colors.green : (state.metrics.waterPurity > 45 ? Colors.amber : Colors.red)),
-                        const SizedBox(width: 4),
-                        _metricBadge('Soil', '${state.metrics.soilHealth.toStringAsFixed(0)}%', state.metrics.soilHealth > 70 ? Colors.green : (state.metrics.soilHealth > 45 ? Colors.amber : Colors.red)),
-                        const SizedBox(width: 4),
-                        _metricBadge('Waste', state.metrics.noiseWaste.toStringAsFixed(0), state.metrics.noiseWaste < 35 ? Colors.green : (state.metrics.noiseWaste < 65 ? Colors.amber : Colors.red)),
-                      ],
-                    ),
-                  ],
-                ),
+            const SizedBox(width: 2),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: GameText(value, size: 14, color: color),
               ),
             ),
-
-            // 3. Advisor Pop-up Dialog
-            if (widget.controller.activeAdvisorDialog != null)
-              Positioned(
-                top: 85,
-                left: 12,
-                right: 12,
-                child: Card(
-                  color: const Color(0xFF232D3F),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: const BorderSide(color: Colors.greenAccent, width: 1.5),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Image.asset(
-                          widget.controller.activeAdvisorDialog!.portraitAsset,
-                          width: 52,
-                          height: 52,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${widget.controller.activeAdvisorDialog!.advisorName} (${widget.controller.activeAdvisorDialog!.title})',
-                                style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                widget.controller.activeAdvisorDialog!.message,
-                                style: const TextStyle(color: Colors.white, fontSize: 11),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                widget.controller.activeAdvisorDialog!.evsConcept,
-                                style: const TextStyle(color: Colors.amberAccent, fontStyle: FontStyle.italic, fontSize: 10),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white70, size: 18),
-                          onPressed: () => widget.controller.dismissAdvisor(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            // 4. Bottom Toolbar: Buildings Carousel & End Day Button
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.black.withOpacity(0.85),
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: widget.controller.isDemolishMode ? Colors.red : Colors.grey[800],
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                          onPressed: () => widget.controller.toggleDemolish(),
-                          icon: const Icon(Icons.delete_outline, size: 16),
-                          label: const Text('Demolish', style: TextStyle(fontSize: 11)),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            widget.controller.selectedBuilding != null
-                                ? 'Selected: ${widget.controller.selectedBuilding!.name} (\$${widget.controller.selectedBuilding!.cost})'
-                                : (widget.controller.isDemolishMode ? 'Demolish mode active' : 'Tap a building below to place'),
-                            style: const TextStyle(color: Colors.white70, fontSize: 11),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green[700],
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          ),
-                          onPressed: () => widget.controller.endDay(),
-                          icon: const Icon(Icons.wb_sunny, size: 16),
-                          label: const Text('End Day', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 56,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: BuildingsData.all.values.map((b) {
-                          final isSelected = widget.controller.selectedBuilding?.id == b.id;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: InkWell(
-                              onTap: () => widget.controller.selectBuilding(b),
-                              child: Container(
-                                width: 56,
-                                decoration: BoxDecoration(
-                                  color: isSelected ? Colors.green.withOpacity(0.3) : Colors.grey[900],
-                                  border: Border.all(
-                                    color: isSelected ? Colors.greenAccent : Colors.grey[700]!,
-                                    width: isSelected ? 2 : 1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset('assets/images/${b.spritePath}', width: 24, height: 24),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '\$${b.cost}',
-                                      style: TextStyle(
-                                        color: isSelected ? Colors.greenAccent : Colors.white70,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // 5. Collapse countdown banner
-            if (state.criticalDays > 0 && !widget.controller.isGameOver)
-              Positioned(
-                bottom: 112,
-                left: 12,
-                right: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade900.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent),
-                  ),
-                  child: Text(
-                    '⚠️ CRITICAL POLLUTION: city collapses in ${GameConstants.collapseDaysToLose - state.criticalDays} day(s) unless conditions improve',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                  ),
-                ),
-              ),
-
-            // 6. Victory / Defeat overlay
-            if (widget.controller.gameOutcome != null)
-              Positioned.fill(child: _buildOutcomeOverlay(context)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildOutcomeOverlay(BuildContext context) {
-    final outcome = widget.controller.gameOutcome!;
-    final won = outcome.isVictory;
-    final s = outcome.nextState;
-    final accent = won ? Colors.greenAccent : Colors.redAccent;
+  Widget _meter(String icon, String label, String value, double goodness) {
+    final col = healthColor(goodness);
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Image.asset(
+                'assets/images/$icon',
+                width: 16,
+                height: 16,
+                filterQuality: FilterQuality.medium,
+              ),
+              const SizedBox(width: 3),
+              Expanded(
+                child: GameText(
+                  label,
+                  size: 10,
+                  color: GameColors.parchment,
+                  maxLines: 1,
+                ),
+              ),
+              GameText(value, size: 11, color: col),
+            ],
+          ),
+          const SizedBox(height: 3),
+          GameMeter(fraction: goodness, color: col),
+        ],
+      ),
+    );
+  }
 
+  // ------------------------------------------------------------------ advisor
+
+  Widget _advisorBox() {
+    final a = c.activeAdvisorDialog!;
+    return GestureDetector(
+      onTap: c.dismissAdvisor,
+      child: GamePanel(
+        padding: const EdgeInsets.all(8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: GameColors.ink, width: 2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: Image.asset(
+                  a.portraitAsset,
+                  width: 64,
+                  height: 64,
+                  filterQuality: FilterQuality.medium,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GameText(
+                          a.advisorName,
+                          size: 15,
+                          color: GameColors.gold,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const GameText(
+                        'TAP TO CLOSE',
+                        size: 9,
+                        color: Color(0xFFB9A57A),
+                      ),
+                    ],
+                  ),
+                  GameText(
+                    a.title.toUpperCase(),
+                    size: 10,
+                    color: GameColors.leaf,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    a.message,
+                    style: const TextStyle(
+                      fontFamily: kGameFont,
+                      color: GameColors.parchment,
+                      fontSize: 12.5,
+                      height: 1.25,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: GameColors.woodDark,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: GameColors.leafDark,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Text(
+                      a.evsConcept,
+                      style: const TextStyle(
+                        fontFamily: kGameFont,
+                        color: GameColors.leaf,
+                        fontSize: 11.5,
+                        height: 1.25,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------ bottom
+
+  Widget _collapseBanner(int days) {
+    final left = GameConstants.collapseDaysToLose - days;
+    return GamePanel(
+      fill: GameColors.dangerDark,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        children: [
+          Image.asset(
+            'assets/images/ui/streak_flame.png',
+            width: 22,
+            height: 22,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: GameText(
+              'CRITICAL POLLUTION!  City collapses in $left day${left == 1 ? '' : 's'}',
+              size: 12.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildingInfo(BuildingType b) {
+    final chips = <Widget>[
+      if (b.revenuePerTurn != 0)
+        _effect(
+          'ui/icon_funds.png',
+          b.revenuePerTurn.toDouble(),
+          true,
+          prefix: '\$',
+        ),
+      if (b.population != 0)
+        _effect('ui/icon_population.png', b.population.toDouble(), true),
+      if (b.aqiDelta != 0) _effect('ui/icon_aqi.png', b.aqiDelta, false),
+      if (b.waterDelta != 0) _effect('ui/icon_water.png', b.waterDelta, true),
+      if (b.soilDelta != 0) _effect('ui/icon_soil.png', b.soilDelta, true),
+      if (b.noiseWasteDelta != 0)
+        _effect('ui/icon_noise.png', b.noiseWasteDelta, false),
+    ];
+    return GamePanel(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: GameText(
+                  b.name,
+                  size: 15,
+                  color: GameColors.gold,
+                  maxLines: 1,
+                ),
+              ),
+              GameText(
+                '${b.width}x${b.height}',
+                size: 11,
+                color: const Color(0xFFB9A57A),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => c.selectBuilding(null),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 20,
+                  color: GameColors.parchment,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            b.description,
+            style: const TextStyle(
+              fontFamily: kGameFont,
+              color: GameColors.parchment,
+              fontSize: 12,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(spacing: 5, runSpacing: 5, children: chips),
+          const SizedBox(height: 4),
+          const GameText(
+            'Tap the map to build',
+            size: 10,
+            color: Color(0xFFB9A57A),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// One effect chip. [higherIsGood] decides whether a positive number is green.
+  Widget _effect(
+    String icon,
+    double v,
+    bool higherIsGood, {
+    String prefix = '',
+  }) {
+    final good = higherIsGood ? v > 0 : v < 0;
+    final sign = v > 0 ? '+' : '-';
+    final abs = v.abs();
+    final txt = abs == abs.roundToDouble()
+        ? abs.toStringAsFixed(0)
+        : abs.toStringAsFixed(1);
+    return GameSlot(
+      glow: good ? GameColors.leafDark : GameColors.dangerDark,
+      padding: const EdgeInsets.fromLTRB(3, 1, 6, 1),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset('assets/images/$icon', width: 16, height: 16),
+          const SizedBox(width: 3),
+          GameText(
+            '$sign$prefix$txt',
+            size: 12,
+            color: good ? GameColors.leaf : const Color(0xFFFF7A6B),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenu() {
+    final items = BuildingsData.all.values
+        .where((b) => b.category == _tab)
+        .toList();
+    return GamePanel(
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Category tabs
+          Row(
+            children: [
+              for (final t in _tabs) ...[
+                Expanded(child: _tabButton(t.$1, t.$2, t.$3)),
+                if (t != _tabs.last) const SizedBox(width: 4),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Building cards
+          SizedBox(
+            height: 92,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 6),
+              itemBuilder: (_, i) => _card(items[i]),
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Actions
+          Row(
+            children: [
+              GameButton(
+                onPressed: c.toggleDemolish,
+                color: c.isDemolishMode
+                    ? GameColors.danger
+                    : GameColors.woodLight,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/images/ui/btn_demolish.png',
+                      width: 26,
+                      height: 26,
+                    ),
+                    const SizedBox(width: 6),
+                    GameText(
+                      c.isDemolishMode ? 'CANCEL' : 'DEMOLISH',
+                      size: 14,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GameButton(
+                  onPressed: c.isGameOver ? null : c.endDay,
+                  color: const Color(0xFFE29B1E),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GameText('END DAY', size: 19),
+                      SizedBox(width: 4),
+                      Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 24,
+                        shadows: [
+                          Shadow(
+                            color: GameColors.ink,
+                            offset: Offset(1.5, 1.5),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tabButton(BuildingCategory cat, String label, String icon) {
+    final active = _tab == cat;
+    return GestureDetector(
+      onTap: () => setState(() => _tab = cat),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: active ? GameColors.woodLight : GameColors.woodDark,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: active ? GameColors.gold : GameColors.ink,
+            width: active ? 2 : 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset('assets/images/$icon', width: 16, height: 16),
+            const SizedBox(width: 3),
+            Flexible(
+              child: GameText(
+                label,
+                size: 11.5,
+                color: active ? GameColors.gold : GameColors.parchment,
+                maxLines: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _card(BuildingType b) {
+    final selected = c.selectedBuilding?.id == b.id;
+    final affordable = c.state.canAfford(b);
+    return GestureDetector(
+      onTap: () => c.selectBuilding(b),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        width: 74,
+        transform: Matrix4.translationValues(0, selected ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4E6B2A) : GameColors.woodDark,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(
+            color: selected ? GameColors.gold : GameColors.ink,
+            width: selected ? 2.5 : 1.5,
+          ),
+          boxShadow: selected
+              ? const [BoxShadow(color: Color(0x88FFC93C), blurRadius: 8)]
+              : null,
+        ),
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 3),
+        child: Opacity(
+          opacity: affordable ? 1 : 0.45,
+          child: Column(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: Image.asset(
+                    'assets/images/${b.spritePath}',
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: GameText(
+                  _short[b.id] ?? b.name,
+                  size: 10.5,
+                  color: GameColors.parchment,
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset(
+                    'assets/images/ui/icon_funds.png',
+                    width: 11,
+                    height: 11,
+                  ),
+                  const SizedBox(width: 2),
+                  GameText(
+                    '${b.cost}',
+                    size: 11,
+                    color: affordable
+                        ? GameColors.gold
+                        : const Color(0xFFFF7A6B),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const _short = {
+    'coal_plant': 'Coal Plant',
+    'factory': 'Factory',
+    'oil_refinery': 'Refinery',
+    'landfill': 'Landfill',
+    'house': 'House',
+    'apartment': 'Apartments',
+    'park': 'Park',
+    'solar_farm': 'Solar Farm',
+    'wind_turbine': 'Wind',
+    'water_treatment': 'Water Plant',
+    'recycling_center': 'Recycling',
+    'composting': 'Compost',
+    'green_roof': 'Green Roof',
+    'sewage_treatment': 'Sewage',
+    'road': 'Road',
+    'hospital': 'Hospital',
+    'school': 'School',
+    'ev_station': 'EV Charger',
+  };
+
+  // ------------------------------------------------------------------ outcome
+
+  Widget _outcomeOverlay(BuildContext context) {
+    final o = c.gameOutcome!;
+    final won = o.isVictory;
+    final s = o.nextState;
+    final accent = won ? GameColors.gold : const Color(0xFFFF7A6B);
     return Container(
-      color: Colors.black.withValues(alpha: 0.8),
+      color: const Color(0xCC000000),
       alignment: Alignment.center,
       padding: const EdgeInsets.all(20),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
-        child: Card(
-          color: const Color(0xFF1B2430),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: accent, width: 2),
-          ),
+        child: GamePanel(
+          padding: const EdgeInsets.all(16),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(won ? '🏆' : '☠️', style: const TextStyle(fontSize: 48)),
+                Image.asset(
+                  won
+                      ? 'assets/images/ui/icon_trophy.png'
+                      : 'assets/images/ui/streak_flame.png',
+                  width: 80,
+                  height: 80,
+                ),
+                const SizedBox(height: 6),
+                GameText(
+                  won ? 'GREEN CITY ACHIEVED!' : 'CITY COLLAPSED',
+                  size: 24,
+                  color: accent,
+                  align: TextAlign.center,
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  won ? 'GREEN CITY ACHIEVED!' : 'CITY COLLAPSED',
+                  o.endReason ?? '',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: accent, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                  style: const TextStyle(
+                    fontFamily: kGameFont,
+                    color: GameColors.parchment,
+                    fontSize: 13.5,
+                    height: 1.25,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  outcome.endReason ?? '',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _stat('ui/icon_aqi.png', s.metrics.aqi.toStringAsFixed(0)),
+                    _stat(
+                      'ui/icon_water.png',
+                      '${s.metrics.waterPurity.round()}',
+                    ),
+                    _stat(
+                      'ui/icon_soil.png',
+                      '${s.metrics.soilHealth.round()}',
+                    ),
+                    _stat(
+                      'ui/icon_noise.png',
+                      s.metrics.noiseWaste.toStringAsFixed(0),
+                    ),
+                    _stat('ui/icon_population.png', '${s.population}'),
+                    _stat('ui/icon_funds.png', '${s.funds}'),
+                  ],
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Day ${s.turn - 1}  •  AQI ${s.metrics.aqi.toStringAsFixed(0)}  •  Water ${s.metrics.waterPurity.toStringAsFixed(0)}%\n'
-                  'Soil ${s.metrics.soilHealth.toStringAsFixed(0)}%  •  Waste ${s.metrics.noiseWaste.toStringAsFixed(0)}  •  Pop ${s.population}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: won ? Colors.green[700] : Colors.orange[800],
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    onPressed: won ? widget.controller.continueInfiniteMode : widget.controller.restart,
-                    icon: Icon(won ? Icons.all_inclusive : Icons.refresh),
-                    label: Text(
-                      won ? 'Keep Building (Infinite Mode)' : 'Try Again',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                  child: GameButton(
+                    onPressed: won ? c.continueInfiniteMode : c.restart,
+                    color: won ? GameColors.leafDark : const Color(0xFFE29B1E),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: GameText(
+                      won ? 'KEEP BUILDING  ∞' : 'TRY AGAIN',
+                      size: 17,
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
+                  child: GameButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.home),
-                    label: const Text('Main Menu'),
+                    color: GameColors.woodLight,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: const GameText('MAIN MENU', size: 15),
                   ),
                 ),
               ],
@@ -354,20 +861,59 @@ class _GameplayScreenState extends State<GameplayScreen> {
     );
   }
 
-  Widget _metricBadge(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.2),
-          border: Border.all(color: color, width: 1),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Column(
-          children: [
-            Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
-            Text(value, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-          ],
+  Widget _stat(String icon, String v) {
+    return GameSlot(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset('assets/images/$icon', width: 18, height: 18),
+          const SizedBox(width: 4),
+          GameText(v, size: 13),
+        ],
+      ),
+    );
+  }
+}
+
+class _Toast extends StatefulWidget {
+  final String text;
+  final bool error;
+
+  const _Toast({super.key, required this.text, required this.error});
+
+  @override
+  State<_Toast> createState() => _ToastState();
+}
+
+class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  )..forward();
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _a,
+        builder: (_, child) {
+          final t = _a.value;
+          final opacity = t < 0.1 ? t / 0.1 : (t > 0.75 ? (1 - t) / 0.25 : 1.0);
+          return Opacity(
+            opacity: opacity.clamp(0.0, 1.0),
+            child: Transform.translate(offset: Offset(0, -8 * t), child: child),
+          );
+        },
+        child: GamePanel(
+          fill: widget.error ? GameColors.dangerDark : GameColors.leafDark,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+          child: GameText(widget.text, size: 14),
         ),
       ),
     );

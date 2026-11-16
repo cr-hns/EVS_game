@@ -17,6 +17,7 @@ class EcoMayorApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
+        fontFamily: 'PixelifySans',
         primarySwatch: Colors.green,
         scaffoldBackgroundColor: const Color(0xFF1E242B),
       ),
