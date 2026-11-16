@@ -15,6 +15,7 @@ defaults:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -28,6 +29,7 @@ jobs:
   android:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -50,6 +52,7 @@ jobs:
   windows:
     needs: test
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -58,8 +61,11 @@ jobs:
           channel: stable
           cache: true
       - run: flutter config --enable-windows-desktop
-      - run: flutter pub get
+      # A one-off hang here once ran for 30+ minutes; fail fast and verbosely instead.
+      - run: flutter pub get -v
+        timeout-minutes: 10
       - run: flutter build windows --release
+        timeout-minutes: 20
       # Bundle the Visual C++ runtime so the .exe runs on a fresh Windows 10 PC
       # without the user installing the VC++ Redistributable.
       - name: Bundle VC++ runtime

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../controllers/game_controller.dart';
+import '../platform/window_control.dart';
 import '../ui/game_theme.dart';
 import 'gameplay_screen.dart';
 
@@ -221,6 +222,17 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           'assets/images/ui/menu_earth.png',
           () => _go(_Page.about),
         ),
+        if (WindowControl.supported) ...[
+          const SizedBox(height: 8),
+          ValueListenableBuilder<bool>(
+            valueListenable: WindowControl.fullscreen,
+            builder: (_, full, _) => _menuButton(
+              full ? 'EXIT FULLSCREEN' : 'FULLSCREEN',
+              null,
+              WindowControl.toggleFullscreen,
+            ),
+          ),
+        ],
         if (_isDesktop) ...[
           const SizedBox(height: 8),
           _menuButton(

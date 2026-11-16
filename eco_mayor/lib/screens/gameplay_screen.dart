@@ -175,7 +175,9 @@ class _GameplayScreenState extends State<GameplayScreen> {
           if (s.turn > 1 && c.lastResult != null && !c.isGameOver)
             Positioned(
               // Middle of the map area, below where advisors appear.
-              top: (_topH + MediaQuery.of(context).size.height - _bottomH) / 2 + 10,
+              top:
+                  (_topH + MediaQuery.of(context).size.height - _bottomH) / 2 +
+                  10,
               left: 0,
               right: 0,
               child: Center(

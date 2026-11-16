@@ -3,6 +3,8 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <flutter/encodable_value.h>
 
 #include <memory>
 
@@ -28,6 +30,14 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // "ecomayor/window" channel: lets the game toggle borderless fullscreen.
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> window_channel_;
+  bool is_fullscreen_ = false;
+  LONG saved_style_ = 0;
+  RECT saved_rect_ = {0, 0, 0, 0};
+
+  void SetFullscreen(bool fullscreen);
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
