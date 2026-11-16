@@ -32,9 +32,42 @@ class TerrainPainter {
 
   bool _roadLike(int x, int y) => _at(x, y) == Terrain.road || isBridge(x, y);
 
+  /// Connected sides in t-r-b-l order, matching the tile file names
+  /// (e.g. "tb" = vertical, "rb" = right+bottom bend).
+  String riverMask(int x, int y) {
+    final s = StringBuffer();
+    if (y == 0 || _isRiver(x, y - 1)) s.write('t');
+    if (_isRiver(x + 1, y)) s.write('r');
+    if (y == _n - 1 || _isRiver(x, y + 1)) s.write('b');
+    if (_isRiver(x - 1, y)) s.write('l');
+    return s.toString();
+  }
+
+  String roadMask(int x, int y) {
+    final s = StringBuffer();
+    if (_roadLike(x, y - 1)) s.write('t');
+    if (_roadLike(x + 1, y) || x == _n - 1) s.write('r');
+    if (_roadLike(x, y + 1)) s.write('b');
+    if (_roadLike(x - 1, y) || x == 0) s.write('l');
+    return s.isEmpty ? 'b' : s.toString();
+  }
+
+  /// Forest tile variant: an "edge" when the cell below isn't forest,
+  /// otherwise one of three canopy layouts picked by position.
+  String forestVariant(int x, int y) {
+    if (y < _n - 1 && _at(x, y + 1) != Terrain.forest) return 'edge';
+    return const ['a', 'b', 'c'][(x * 7 + y * 13) % 3];
+  }
+
   // ------------------------------------------------------------------ river
 
-  void paintRiver(Canvas c, int x, int y, {required bool polluted, required double time}) {
+  void paintRiver(
+    Canvas c,
+    int x,
+    int y, {
+    required bool polluted,
+    required double time,
+  }) {
     final r = Rect.fromLTWH(x * tile, y * tile, tile, tile);
     final up = y == 0 || _isRiver(x, y - 1);
     final down = y == _n - 1 || _isRiver(x, y + 1);
@@ -60,27 +93,74 @@ class TerrainPainter {
       final t = (phase + i * 0.5) % 1.0;
       if (up || down) {
         final yy = r.top + t * tile;
-        c.drawLine(Offset(cx - w * 0.25, yy), Offset(cx + w * 0.05, yy), ripple);
+        c.drawLine(
+          Offset(cx - w * 0.25, yy),
+          Offset(cx + w * 0.05, yy),
+          ripple,
+        );
       } else {
         final xx = r.left + t * tile;
-        c.drawLine(Offset(xx, cy - w * 0.15), Offset(xx, cy + w * 0.15), ripple);
+        c.drawLine(
+          Offset(xx, cy - w * 0.15),
+          Offset(xx, cy + w * 0.15),
+          ripple,
+        );
       }
     }
 
-    if (isBridge(x, y)) {
+    if (isBridge(x, y)) paintBridgeDeck(c, x, y);
+  }
+
+  /// Full-width road deck with railings over a river cell.
+  void paintBridgeDeck(Canvas c, int x, int y) {
+    final r = Rect.fromLTWH(x * tile, y * tile, tile, tile);
+    {
       final horizontal = _at(x - 1, y) == Terrain.road;
       final deck = horizontal
-          ? Rect.fromCenter(center: r.center, width: tile + 1, height: tile * 0.5)
-          : Rect.fromCenter(center: r.center, width: tile * 0.5, height: tile + 1);
-      c.drawRect(deck.inflate(tile * 0.05), Paint()..color = const Color(0xFF6B5B4B));
+          ? Rect.fromCenter(
+              center: r.center,
+              width: tile + 1,
+              height: tile * 0.5,
+            )
+          : Rect.fromCenter(
+              center: r.center,
+              width: tile * 0.5,
+              height: tile + 1,
+            );
+      c.drawRect(
+        deck.inflate(tile * 0.05),
+        Paint()..color = const Color(0xFF6B5B4B),
+      );
       c.drawRect(deck, Paint()..color = const Color(0xFF55585F));
       final rail = Paint()..color = const Color(0xFFCFC3A8);
       if (horizontal) {
-        c.drawRect(Rect.fromLTWH(deck.left, deck.top, deck.width, tile * 0.05), rail);
-        c.drawRect(Rect.fromLTWH(deck.left, deck.bottom - tile * 0.05, deck.width, tile * 0.05), rail);
+        c.drawRect(
+          Rect.fromLTWH(deck.left, deck.top, deck.width, tile * 0.05),
+          rail,
+        );
+        c.drawRect(
+          Rect.fromLTWH(
+            deck.left,
+            deck.bottom - tile * 0.05,
+            deck.width,
+            tile * 0.05,
+          ),
+          rail,
+        );
       } else {
-        c.drawRect(Rect.fromLTWH(deck.left, deck.top, tile * 0.05, deck.height), rail);
-        c.drawRect(Rect.fromLTWH(deck.right - tile * 0.05, deck.top, tile * 0.05, deck.height), rail);
+        c.drawRect(
+          Rect.fromLTWH(deck.left, deck.top, tile * 0.05, deck.height),
+          rail,
+        );
+        c.drawRect(
+          Rect.fromLTWH(
+            deck.right - tile * 0.05,
+            deck.top,
+            tile * 0.05,
+            deck.height,
+          ),
+          rail,
+        );
       }
     }
   }
@@ -95,19 +175,53 @@ class TerrainPainter {
     final right = _roadLike(x + 1, y) || x == _n - 1;
     final w = tile * 0.56;
 
-    _arms(c, r, up, down, left, right, w + tile * 0.1, Paint()..color = const Color(0xFFB9BCC4));
-    _arms(c, r, up, down, left, right, w, Paint()..color = const Color(0xFF4A4D55));
+    _arms(
+      c,
+      r,
+      up,
+      down,
+      left,
+      right,
+      w + tile * 0.1,
+      Paint()..color = const Color(0xFFB9BCC4),
+    );
+    _arms(
+      c,
+      r,
+      up,
+      down,
+      left,
+      right,
+      w,
+      Paint()..color = const Color(0xFF4A4D55),
+    );
 
     // Dashed centre line on straight sections only.
     final dash = Paint()..color = const Color(0xFFE7C04A);
     final arms = [up, down, left, right].where((a) => a).length;
     if (arms == 2 && (left && right)) {
       for (var i = 0; i < 2; i++) {
-        c.drawRect(Rect.fromLTWH(r.left + tile * (0.1 + i * 0.5), r.center.dy - tile * 0.02, tile * 0.28, tile * 0.04), dash);
+        c.drawRect(
+          Rect.fromLTWH(
+            r.left + tile * (0.1 + i * 0.5),
+            r.center.dy - tile * 0.02,
+            tile * 0.28,
+            tile * 0.04,
+          ),
+          dash,
+        );
       }
     } else if (arms == 2 && (up && down)) {
       for (var i = 0; i < 2; i++) {
-        c.drawRect(Rect.fromLTWH(r.center.dx - tile * 0.02, r.top + tile * (0.1 + i * 0.5), tile * 0.04, tile * 0.28), dash);
+        c.drawRect(
+          Rect.fromLTWH(
+            r.center.dx - tile * 0.02,
+            r.top + tile * (0.1 + i * 0.5),
+            tile * 0.04,
+            tile * 0.28,
+          ),
+          dash,
+        );
       }
     }
   }
@@ -118,13 +232,21 @@ class TerrainPainter {
     final r = Rect.fromLTWH(x * tile, y * tile, tile, tile);
     final rnd = math.Random(x * 73856093 ^ y * 19349663);
     // Five crowns on a jittered layout so neighbouring tiles blend together.
-    const spots = [(0.25, 0.25), (0.75, 0.22), (0.5, 0.55), (0.22, 0.8), (0.78, 0.78)];
+    const spots = [
+      (0.25, 0.25),
+      (0.75, 0.22),
+      (0.5, 0.55),
+      (0.22, 0.8),
+      (0.78, 0.78),
+    ];
     final shadow = Paint()..color = const Color(0x40000000);
-    final outline = Paint()..color = dead ? const Color(0xFF3A2C1E) : const Color(0xFF173D17);
+    final outline = Paint()
+      ..color = dead ? const Color(0xFF3A2C1E) : const Color(0xFF173D17);
     final crowns = dead
         ? const [Color(0xFF7A6248), Color(0xFF8E7A5E), Color(0xFF6B5A47)]
         : const [Color(0xFF2E7D32), Color(0xFF388E3C), Color(0xFF2B6E2E)];
-    final hi = Paint()..color = dead ? const Color(0xFFA89272) : const Color(0xFF6BBF4E);
+    final hi = Paint()
+      ..color = dead ? const Color(0xFFA89272) : const Color(0xFF6BBF4E);
 
     for (final (sx, sy) in spots) {
       final cx = r.left + (sx + (rnd.nextDouble() - 0.5) * 0.12) * tile;
@@ -132,7 +254,11 @@ class TerrainPainter {
       final rad = tile * (dead ? 0.13 : 0.19) * (0.85 + rnd.nextDouble() * 0.3);
       c.drawCircle(Offset(cx + tile * 0.04, cy + tile * 0.06), rad, shadow);
       c.drawCircle(Offset(cx, cy), rad + tile * 0.025, outline);
-      c.drawCircle(Offset(cx, cy), rad, Paint()..color = crowns[rnd.nextInt(3)]);
+      c.drawCircle(
+        Offset(cx, cy),
+        rad,
+        Paint()..color = crowns[rnd.nextInt(3)],
+      );
       c.drawCircle(Offset(cx - rad * 0.3, cy - rad * 0.3), rad * 0.4, hi);
       if (dead) {
         // bare branches poking out
@@ -148,7 +274,16 @@ class TerrainPainter {
   // ------------------------------------------------------------------ helper
 
   /// Centre square plus an arm towards every connected side.
-  void _arms(Canvas c, Rect r, bool up, bool down, bool left, bool right, double w, Paint p) {
+  void _arms(
+    Canvas c,
+    Rect r,
+    bool up,
+    bool down,
+    bool left,
+    bool right,
+    double w,
+    Paint p,
+  ) {
     final cx = r.center.dx, cy = r.center.dy, h = w / 2;
     c.drawRect(Rect.fromLTRB(cx - h, cy - h, cx + h, cy + h), p);
     if (up) c.drawRect(Rect.fromLTRB(cx - h, r.top - 0.3, cx + h, cy), p);

@@ -62,6 +62,42 @@ class EcoMayorFlameGame extends FlameGame
     for (final key in terrain) {
       _sprites[key] = await loadSprite(key);
     }
+    // Connected map tiles; any missing piece falls back to TerrainPainter.
+    final mapTiles = [
+      for (final v in ['a', 'b', 'c', 'edge']) ...[
+        'tiles/forest_$v.png',
+        'tiles/forest_dead_$v.png',
+      ],
+      for (final m in ['tb', 'rl', 'tr', 'rb', 'bl', 'tl']) ...[
+        'tiles/river_$m.png',
+        'tiles/river_${m}_polluted.png',
+      ],
+      for (final m in [
+        'tb',
+        'rl',
+        'tr',
+        'rb',
+        'bl',
+        'tl',
+        'trb',
+        'rbl',
+        'tbl',
+        'trl',
+        'trbl',
+        't',
+        'r',
+        'b',
+        'l',
+      ])
+        'tiles/road_$m.png',
+    ];
+    for (final key in mapTiles) {
+      try {
+        _sprites[key] = await loadSprite(key);
+      } catch (_) {
+        // not generated yet: procedural fallback is used
+      }
+    }
     for (final b in BuildingsData.all.values) {
       _sprites[b.spritePath] = await loadSprite(b.spritePath);
     }
@@ -114,7 +150,10 @@ class EcoMayorFlameGame extends FlameGame
     final mapW = _mapPx * zoom;
     final keep = mapW * 0.25;
     mapOffset.x = mapOffset.x.clamp(keep - mapW, size.x - keep);
-    mapOffset.y = mapOffset.y.clamp(topInset + keep - mapW, size.y - bottomInset - keep);
+    mapOffset.y = mapOffset.y.clamp(
+      topInset + keep - mapW,
+      size.y - bottomInset - keep,
+    );
   }
 
   @override
@@ -145,7 +184,10 @@ class EcoMayorFlameGame extends FlameGame
   math.Point<int>? _cellAt(Vector2 screen) {
     final lx = (screen.x - mapOffset.x) / (_tile * zoom);
     final ly = (screen.y - mapOffset.y) / (_tile * zoom);
-    if (lx < 0 || ly < 0 || lx >= GameConstants.gridCols || ly >= GameConstants.gridRows) {
+    if (lx < 0 ||
+        ly < 0 ||
+        lx >= GameConstants.gridCols ||
+        ly >= GameConstants.gridRows) {
       return null;
     }
     return math.Point(lx.floor(), ly.floor());
@@ -158,8 +200,14 @@ class EcoMayorFlameGame extends FlameGame
     final b = controller.selectedBuilding;
     if (b != null && !controller.isDemolishMode) {
       // Centre multi-tile buildings on the tapped cell.
-      final gx = (cell.x - (b.width - 1) ~/ 2).clamp(0, GameConstants.gridCols - b.width);
-      final gy = (cell.y - (b.height - 1) ~/ 2).clamp(0, GameConstants.gridRows - b.height);
+      final gx = (cell.x - (b.width - 1) ~/ 2).clamp(
+        0,
+        GameConstants.gridCols - b.width,
+      );
+      final gy = (cell.y - (b.height - 1) ~/ 2).clamp(
+        0,
+        GameConstants.gridRows - b.height,
+      );
       controller.placeBuildingAt(gx, gy);
     } else {
       controller.placeBuildingAt(cell.x, cell.y);
@@ -192,7 +240,10 @@ class EcoMayorFlameGame extends FlameGame
     // Map frame + drop shadow so the board reads as a game board.
     final board = Rect.fromLTWH(0, 0, _mapPx, _mapPx);
     canvas.drawRRect(
-      RRect.fromRectAndRadius(board.shift(const Offset(0, 6)).inflate(4), const Radius.circular(6)),
+      RRect.fromRectAndRadius(
+        board.shift(const Offset(0, 6)).inflate(4),
+        const Radius.circular(6),
+      ),
       Paint()..color = const Color(0x99000000),
     );
     canvas.drawRRect(
@@ -217,24 +268,57 @@ class EcoMayorFlameGame extends FlameGame
           size: Vector2.all(_tile + 0.5), // overlap hides seams when zoomed
           overridePaint: _spritePaint,
         );
+        final pos = Vector2(x * _tile, y * _tile);
+        final sz = Vector2.all(_tile + 0.5);
         if (base == Terrain.river) {
-          painter.paintRiver(canvas, x, y, polluted: waterBad, time: _time);
+          final bridge = painter.isBridge(x, y);
+          final mask = bridge ? 'tb' : painter.riverMask(x, y);
+          final sprite =
+              _sprites['tiles/river_$mask${waterBad ? '_polluted' : ''}.png'];
+          if (sprite != null) {
+            sprite.render(
+              canvas,
+              position: pos,
+              size: sz,
+              overridePaint: _spritePaint,
+            );
+            if (bridge) painter.paintBridgeDeck(canvas, x, y);
+          } else {
+            painter.paintRiver(canvas, x, y, polluted: waterBad, time: _time);
+          }
         } else if (base == Terrain.road) {
-          painter.paintRoad(canvas, x, y);
-        }
-      }
-    }
-    // Trees last so their crowns overlap neighbouring tiles a little.
-    for (int y = 0; y < GameConstants.gridRows; y++) {
-      for (int x = 0; x < GameConstants.gridCols; x++) {
-        if (state.terrain[y][x] == Terrain.forest) {
-          painter.paintForest(canvas, x, y, dead: soilBad);
+          final sprite = _sprites['tiles/road_${painter.roadMask(x, y)}.png'];
+          if (sprite != null) {
+            sprite.render(
+              canvas,
+              position: pos,
+              size: sz,
+              overridePaint: _spritePaint,
+            );
+          } else {
+            painter.paintRoad(canvas, x, y);
+          }
+        } else if (base == Terrain.forest) {
+          final v = painter.forestVariant(x, y);
+          final sprite =
+              _sprites['tiles/forest_${soilBad ? 'dead_' : ''}$v.png'];
+          if (sprite != null) {
+            sprite.render(
+              canvas,
+              position: pos,
+              size: sz,
+              overridePaint: _spritePaint,
+            );
+          } else {
+            painter.paintForest(canvas, x, y, dead: soilBad);
+          }
         }
       }
     }
 
     // Build-mode grid
-    final building = controller.selectedBuilding != null || controller.isDemolishMode;
+    final building =
+        controller.selectedBuilding != null || controller.isDemolishMode;
     if (building) {
       final grid = Paint()
         ..color = const Color(0x33FFFFFF)
@@ -246,12 +330,18 @@ class EcoMayorFlameGame extends FlameGame
     }
 
     // 2. Buildings (with a soft shadow), sorted top-to-bottom
-    final placed = [...state.buildings]..sort((a, b) => a.gridY.compareTo(b.gridY));
+    final placed = [...state.buildings]
+      ..sort((a, b) => a.gridY.compareTo(b.gridY));
     final shadow = Paint()..color = const Color(0x55000000);
     for (final p in placed) {
       final t = BuildingsData.all[p.buildingTypeId];
       if (t == null) continue;
-      final r = Rect.fromLTWH(p.gridX * _tile, p.gridY * _tile, t.width * _tile, t.height * _tile);
+      final r = Rect.fromLTWH(
+        p.gridX * _tile,
+        p.gridY * _tile,
+        t.width * _tile,
+        t.height * _tile,
+      );
       canvas.drawRect(r.shift(const Offset(2, 2.5)), shadow);
       _sprites[t.spritePath]?.render(
         canvas,
@@ -266,7 +356,11 @@ class EcoMayorFlameGame extends FlameGame
       if (p.buildingTypeId == 'coal_plant' ||
           p.buildingTypeId == 'factory' ||
           p.buildingTypeId == 'oil_refinery') {
-        _drawSmoke(canvas, Offset((p.gridX + 0.8) * _tile, (p.gridY + 0.5) * _tile), p.gridX * 7.0 + p.gridY);
+        _drawSmoke(
+          canvas,
+          Offset((p.gridX + 0.8) * _tile, (p.gridY + 0.5) * _tile),
+          p.gridX * 7.0 + p.gridY,
+        );
       }
     }
 
@@ -285,7 +379,8 @@ class EcoMayorFlameGame extends FlameGame
           for (int x = 0; x < w && ok; x++) {
             if (state.isCellOccupied(gx + x, gy + y) ||
                 Terrain.isBlocked(state.terrain[gy + y][gx + x]) ||
-                (state.terrain[gy + y][gx + x] == Terrain.river && b.id != 'water_treatment')) {
+                (state.terrain[gy + y][gx + x] == Terrain.river &&
+                    b.id != 'water_treatment')) {
               ok = false;
             }
           }
@@ -329,7 +424,8 @@ class EcoMayorFlameGame extends FlameGame
     const puffs = 4;
     for (int i = 0; i < puffs; i++) {
       final t = ((_time * 0.35 + i / puffs + seed * 0.13) % 1.0);
-      final pos = origin + Offset(math.sin((t + seed) * 6) * 3 + t * 6, -t * 26);
+      final pos =
+          origin + Offset(math.sin((t + seed) * 6) * 3 + t * 6, -t * 26);
       final radius = 3 + t * 7;
       canvas.drawCircle(
         pos,
