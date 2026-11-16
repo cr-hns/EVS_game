@@ -94,14 +94,30 @@ void main() {
     });
   }
 
-  testWidgets('main menu renders on phone', (tester) async {
-    tester.view.physicalSize = const Size(384, 832) * 2;
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.reset);
-    final key = GlobalKey();
-    await tester.pumpWidget(RepaintBoundary(key: key, child: const EcoMayorApp()));
-    await _settle(tester);
-    await _snap(tester, key, 'phone_menu');
-    expect(tester.takeException(), isNull);
-  });
+  for (final entry in sizes.entries) {
+    testWidgets('main menu pages render on ${entry.key}', (tester) async {
+      tester.view.physicalSize = entry.value * 2;
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      final key = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(key: key, child: const EcoMayorApp()));
+      await _settle(tester);
+      await _snap(tester, key, '${entry.key}_menu');
+
+      Future<void> open(String button, String shot) async {
+        await tester.tap(find.text(button));
+        await tester.pump(const Duration(milliseconds: 400));
+        await _settle(tester);
+        await _snap(tester, key, '${entry.key}_$shot');
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('BACK'));
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+
+      await open('PLAY', 'menu_play');
+      await open('HOW TO PLAY', 'menu_help');
+      await open('ABOUT & SDGs', 'menu_about');
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

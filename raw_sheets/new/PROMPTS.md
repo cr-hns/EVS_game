@@ -28,3 +28,15 @@ Save the results in this folder (`raw_sheets/new/`) with exactly these names:
 > Every tile is green grass (matching the reference grass) with a dark grey asphalt road, light grey kerbs and dashed yellow centre lines, exactly like the reference "HORIZ. ROAD". The road is exactly half of the tile wide and always meets the exact centre of a tile edge so tiles connect seamlessly.
 > Tiles: "ROAD VERTICAL", "ROAD HORIZONTAL", "CORNER TOP-RIGHT" (road connects top edge and right edge), "T-JUNCTION" (road connects left, right and bottom edges), "CROSSROAD" (all four edges), "DEAD END" (road comes in from the bottom edge and ends in a rounded cul-de-sac in the centre), "ZEBRA CROSSING" (horizontal road with white zebra stripes), "ROUNDABOUT" (all four edges meet a small round green island in the centre).
 > No other objects, no title.
+
+---
+
+## 4. menu_icons.png: menu and button icons
+
+Attach `raw_sheets/ui.jpg` (not terrain.jpg) as the style reference for this one.
+
+> Pixel art icon sheet in the exact style of the attached reference image: 16-bit SNES-era pixel art icons with dark outlines and bright shading, same palette and line weight. Plain pure white background. A 4 by 3 grid of 12 separate icons, evenly spaced with generous white space between them, no frames, and a short text label in a pixel font centred under each icon.
+> Row 1: "GUIDE BOOK" (an open green book with a leaf bookmark), "EARTH" (a green and blue planet Earth with a small leaf sprouting on top), "EXIT DOOR" (a wooden door slightly open with an arrow pointing out), "BACK ARROW" (a chunky green arrow pointing left).
+> Row 2: "SAPLING" (a small healthy sapling in fresh soil), "SMOGGY TOWN" (two small buildings under a grey smog cloud), "BURNING FACTORY" (a factory with a smokestack and orange flames), "STAR" (a shiny gold star).
+> Row 3: "SOUND ON" (a speaker with sound waves), "SOUND OFF" (a speaker with a red cross), "SAVE DISK" (a green floppy disk), "SETTINGS GEAR" (a silver cog wheel).
+> Every icon is centred and fully visible, nothing touches another icon, no title.
