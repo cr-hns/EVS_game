@@ -52,4 +52,17 @@ class AdvisorDialogues {
           'EVS Concept: Urban green belts serve as natural carbon sinks, dampen acoustic noise, and prevent topsoil erosion.',
     );
   }
+
+  static AdvisorMessage collapseWarning(int daysLeft) {
+    return AdvisorMessage(
+      advisorId: 'rohan',
+      advisorName: 'Citizen Rep Rohan',
+      title: 'Public Health',
+      portraitAsset: 'assets/images/advisors/advisor_rohan.png',
+      message:
+          'EMERGENCY! Pollution has reached critical levels. Hospitals are overflowing and families are packing up. If we do not act, the city collapses in $daysLeft day${daysLeft == 1 ? '' : 's'}!',
+      evsConcept:
+          'EVS Concept: Ecosystems have a carrying capacity. Beyond a tipping point, damage becomes self-reinforcing and very costly to reverse. Cut emissions now: demolish polluters, add treatment plants and green cover.',
+    );
+  }
 }

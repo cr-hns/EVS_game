@@ -13,6 +13,8 @@ class CityState {
   final PollutionMetrics metrics;
   final List<PlacedBuilding> buildings;
   final List<List<String>> terrain; // 20x20 terrain tile IDs ('grass', 'water', etc.)
+  final int criticalDays; // consecutive days spent in critical pollution state
+  final bool infiniteMode; // true after the player wins and keeps building
 
   const CityState({
     required this.cityName,
@@ -25,6 +27,8 @@ class CityState {
     required this.metrics,
     required this.buildings,
     required this.terrain,
+    this.criticalDays = 0,
+    this.infiniteMode = false,
   });
 
   CityState copyWith({
@@ -38,6 +42,8 @@ class CityState {
     PollutionMetrics? metrics,
     List<PlacedBuilding>? buildings,
     List<List<String>>? terrain,
+    int? criticalDays,
+    bool? infiniteMode,
   }) {
     return CityState(
       cityName: cityName ?? this.cityName,
@@ -50,6 +56,8 @@ class CityState {
       metrics: metrics ?? this.metrics,
       buildings: buildings ?? this.buildings,
       terrain: terrain ?? this.terrain,
+      criticalDays: criticalDays ?? this.criticalDays,
+      infiniteMode: infiniteMode ?? this.infiniteMode,
     );
   }
 
@@ -82,6 +90,8 @@ class CityState {
         'metrics': metrics.toJson(),
         'buildings': buildings.map((b) => b.toJson()).toList(),
         'terrain': terrain,
+        'criticalDays': criticalDays,
+        'infiniteMode': infiniteMode,
       };
 
   factory CityState.fromJson(Map<String, dynamic> json) => CityState(
@@ -100,5 +110,7 @@ class CityState {
         terrain: (json['terrain'] as List)
             .map((row) => (row as List).map((cell) => cell as String).toList())
             .toList(),
+        criticalDays: (json['criticalDays'] as int?) ?? 0,
+        infiniteMode: (json['infiniteMode'] as bool?) ?? false,
       );
 }

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/game_controller.dart';
 import '../game/eco_mayor_game.dart';
 import '../data/buildings_data.dart';
-import '../models/building.dart';
+import '../utils/constants.dart';
 
 class GameplayScreen extends StatefulWidget {
   final GameController controller;
@@ -62,7 +62,7 @@ class _GameplayScreenState extends State<GameplayScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          '${state.cityName} (Turn ${state.turn})',
+                          '${state.cityName} (Turn ${state.turn})${state.infiniteMode ? '  ∞' : ''}',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                         ),
                         Row(
@@ -242,7 +242,113 @@ class _GameplayScreenState extends State<GameplayScreen> {
                 ),
               ),
             ),
+
+            // 5. Collapse countdown banner
+            if (state.criticalDays > 0 && !widget.controller.isGameOver)
+              Positioned(
+                bottom: 112,
+                left: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade900.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.redAccent),
+                  ),
+                  child: Text(
+                    '⚠️ CRITICAL POLLUTION: city collapses in ${GameConstants.collapseDaysToLose - state.criticalDays} day(s) unless conditions improve',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                ),
+              ),
+
+            // 6. Victory / Defeat overlay
+            if (widget.controller.gameOutcome != null)
+              Positioned.fill(child: _buildOutcomeOverlay(context)),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOutcomeOverlay(BuildContext context) {
+    final outcome = widget.controller.gameOutcome!;
+    final won = outcome.isVictory;
+    final s = outcome.nextState;
+    final accent = won ? Colors.greenAccent : Colors.redAccent;
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.8),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(20),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Card(
+          color: const Color(0xFF1B2430),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: accent, width: 2),
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(won ? '🏆' : '☠️', style: const TextStyle(fontSize: 48)),
+                const SizedBox(height: 8),
+                Text(
+                  won ? 'GREEN CITY ACHIEVED!' : 'CITY COLLAPSED',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: accent, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  outcome.endReason ?? '',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Day ${s.turn - 1}  •  AQI ${s.metrics.aqi.toStringAsFixed(0)}  •  Water ${s.metrics.waterPurity.toStringAsFixed(0)}%\n'
+                  'Soil ${s.metrics.soilHealth.toStringAsFixed(0)}%  •  Waste ${s.metrics.noiseWaste.toStringAsFixed(0)}  •  Pop ${s.population}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.amberAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: won ? Colors.green[700] : Colors.orange[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: won ? widget.controller.continueInfiniteMode : widget.controller.restart,
+                    icon: Icon(won ? Icons.all_inclusive : Icons.refresh),
+                    label: Text(
+                      won ? 'Keep Building (Infinite Mode)' : 'Try Again',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.home),
+                    label: const Text('Main Menu'),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

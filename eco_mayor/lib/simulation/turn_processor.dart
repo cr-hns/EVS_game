@@ -4,6 +4,7 @@ import '../models/pollution_metrics.dart';
 import '../models/advisor_message.dart';
 import '../data/buildings_data.dart';
 import '../data/advisor_dialogues.dart';
+import '../utils/constants.dart';
 
 class SimulationResult {
   final CityState nextState;
@@ -115,23 +116,33 @@ class TurnProcessor {
     }
 
     // 5. Check Victory / Defeat Conditions
+    // Defeat only on sustained ecological collapse. Low funds or population
+    // trigger advisor warnings instead of ending the game.
+    final nextCriticalDays =
+        updatedMetrics.isCritical() ? current.criticalDays + 1 : 0;
     bool isVictory = false;
     bool isDefeat = false;
     String? endReason;
 
-    if (updatedMetrics.isGreenZone() && nextFunds > 1000 && nextPop >= 100) {
+    if (nextCriticalDays >= GameConstants.collapseDaysToLose) {
+      isDefeat = true;
+      endReason =
+          'Ecological Collapse: The city stayed in a critical pollution state for ${GameConstants.collapseDaysToLose} days straight. Citizens have evacuated and the ecosystem can no longer recover.';
+    } else if (!current.infiniteMode &&
+        updatedMetrics.isGreenZone() &&
+        nextFunds > 1000 &&
+        nextPop >= 100) {
       isVictory = true;
-      endReason = 'Outstanding Leadership! Your city has entered the sustainable Green Zone while maintaining economic stability!';
-    } else if (nextFunds <= 0) {
-      isDefeat = true;
-      endReason = 'City Bankruptcy: Funds reached \$0. Public services have collapsed.';
-    } else if (nextPop < 25) {
-      isDefeat = true;
-      endReason = 'Mass Exodus: Citizens abandoned the city due to unbearable pollution and low quality of life.';
+      endReason =
+          'Outstanding Leadership! Your city has entered the sustainable Green Zone while maintaining economic stability!';
     }
 
     // 6. Advisor Intelligence
     final messages = <AdvisorMessage>[];
+    if (nextCriticalDays > 0 && !isDefeat) {
+      messages.add(AdvisorDialogues.collapseWarning(
+          GameConstants.collapseDaysToLose - nextCriticalDays));
+    }
     if (updatedMetrics.aqi > 150) {
       messages.add(AdvisorDialogues.highAqiWarning(updatedMetrics.aqi));
     }
@@ -152,6 +163,7 @@ class TurnProcessor {
       population: nextPop,
       happiness: targetHappiness,
       metrics: updatedMetrics,
+      criticalDays: nextCriticalDays,
     );
 
     return SimulationResult(

@@ -17,6 +17,9 @@ class GameConstants {
   static const double criticalMaxNoiseWaste = 90.0;
   static const int minSustainablePopulation = 50;
 
+  // Collapse: lose only after this many consecutive days in critical state
+  static const int collapseDaysToLose = 8;
+
   // Currencies & Starting Values
   static const int streakGemBonus = 5;
 }

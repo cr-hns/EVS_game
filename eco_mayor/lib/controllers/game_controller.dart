@@ -13,6 +13,11 @@ class GameController extends ChangeNotifier {
   SimulationResult? lastResult;
   AdvisorMessage? activeAdvisorDialog;
 
+  /// Set when a turn ends in victory or defeat; the gameplay screen shows
+  /// an end-of-game overlay while this is non-null.
+  SimulationResult? gameOutcome;
+  bool get isGameOver => gameOutcome != null;
+
   GameController() {
     startNewGame('Eco City', 'medium');
   }
@@ -71,6 +76,11 @@ class GameController extends ChangeNotifier {
       prePlaced.add(const PlacedBuilding(id: 'l1', buildingTypeId: 'landfill', gridX: 2, gridY: 15));
     }
 
+    gameOutcome = null;
+    lastResult = null;
+    activeAdvisorDialog = null;
+    selectedBuilding = null;
+    isDemolishMode = false;
     state = CityState(
       cityName: name,
       difficulty: difficulty,
@@ -99,6 +109,7 @@ class GameController extends ChangeNotifier {
   }
 
   bool placeBuildingAt(int gridX, int gridY) {
+    if (isGameOver) return false;
     if (isDemolishMode) {
       // Find building that covers this cell
       PlacedBuilding? toRemove;
@@ -165,13 +176,29 @@ class GameController extends ChangeNotifier {
   }
 
   void endDay() {
+    if (isGameOver) return;
     final result = TurnProcessor.processTurn(state);
     lastResult = result;
     state = result.nextState;
-    if (result.messages.isNotEmpty) {
-      activeAdvisorDialog = result.messages.first;
+    activeAdvisorDialog =
+        result.messages.isNotEmpty ? result.messages.first : null;
+    if (result.isVictory || result.isDefeat) {
+      gameOutcome = result;
+      activeAdvisorDialog = null;
     }
     notifyListeners();
+  }
+
+  /// After a win, keep playing with no further victory checks.
+  void continueInfiniteMode() {
+    state = state.copyWith(infiniteMode: true);
+    gameOutcome = null;
+    notifyListeners();
+  }
+
+  /// Start over on the same difficulty (used after a defeat).
+  void restart() {
+    startNewGame(state.cityName, state.difficulty);
   }
 
   void dismissAdvisor() {
