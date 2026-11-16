@@ -50,16 +50,16 @@ class PlacedBuilding {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'buildingTypeId': buildingTypeId,
-        'gridX': gridX,
-        'gridY': gridY,
-      };
+    'id': id,
+    'buildingTypeId': buildingTypeId,
+    'gridX': gridX,
+    'gridY': gridY,
+  };
 
   factory PlacedBuilding.fromJson(Map<String, dynamic> json) => PlacedBuilding(
-        id: json['id'] as String,
-        buildingTypeId: json['buildingTypeId'] as String,
-        gridX: json['gridX'] as int,
-        gridY: json['gridY'] as int,
-      );
+    id: json['id'] as String,
+    buildingTypeId: json['buildingTypeId'] as String,
+    gridX: json['gridX'] as int,
+    gridY: json['gridY'] as int,
+  );
 }

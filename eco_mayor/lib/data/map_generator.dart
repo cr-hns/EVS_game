@@ -29,9 +29,31 @@ class MapGenerator {
 
   // The river, as a connected path of cells from the top edge to the bottom.
   static const List<(int, int)> riverPath = [
-    (4, 0), (4, 1), (4, 2), (4, 3), (5, 3), (6, 3), (6, 4), (6, 5), (6, 6),
-    (6, 7), (6, 8), (6, 9), (6, 10), (5, 10), (4, 10), (4, 11), (4, 12),
-    (4, 13), (3, 13), (3, 14), (3, 15), (3, 16), (3, 17), (3, 18), (3, 19),
+    (4, 0),
+    (4, 1),
+    (4, 2),
+    (4, 3),
+    (5, 3),
+    (6, 3),
+    (6, 4),
+    (6, 5),
+    (6, 6),
+    (6, 7),
+    (6, 8),
+    (6, 9),
+    (6, 10),
+    (5, 10),
+    (4, 10),
+    (4, 11),
+    (4, 12),
+    (4, 13),
+    (3, 13),
+    (3, 14),
+    (3, 15),
+    (3, 16),
+    (3, 17),
+    (3, 18),
+    (3, 19),
   ];
 
   static StartingMap build(String difficulty) {
@@ -39,12 +61,14 @@ class MapGenerator {
     final b = <PlacedBuilding>[];
     var id = 0;
 
-    void put(String type, int x, int y) => b.add(PlacedBuilding(
-          id: 'start_${id++}',
-          buildingTypeId: type,
-          gridX: x,
-          gridY: y,
-        ));
+    void put(String type, int x, int y) => b.add(
+      PlacedBuilding(
+        id: 'start_${id++}',
+        buildingTypeId: type,
+        gridX: x,
+        gridY: y,
+      ),
+    );
 
     for (final (x, y) in riverPath) {
       t[y][x] = Terrain.river;
@@ -132,7 +156,8 @@ class MapGenerator {
     if (difficulty == 'hard') {
       for (var y = 0; y < size; y++) {
         for (var x = 7; x <= 11; x++) {
-          if (t[y][x] == Terrain.grass && (y < 8 || y > 10)) t[y][x] = Terrain.dirt;
+          if (t[y][x] == Terrain.grass && (y < 8 || y > 10))
+            t[y][x] = Terrain.dirt;
         }
       }
     }
@@ -141,14 +166,30 @@ class MapGenerator {
 
   // Forest rectangles (x0, y0, x1, y1), inclusive.
   static const _forestEasy = [
-    (0, 0, 3, 8), (5, 0, 11, 2), (7, 4, 11, 7), (0, 10, 2, 15), (13, 0, 19, 2),
-    (4, 14, 7, 19), (9, 16, 11, 19), (13, 17, 19, 19), (5, 11, 7, 13), (0, 17, 2, 19),
+    (0, 0, 3, 8),
+    (5, 0, 11, 2),
+    (7, 4, 11, 7),
+    (0, 10, 2, 15),
+    (13, 0, 19, 2),
+    (4, 14, 7, 19),
+    (9, 16, 11, 19),
+    (13, 17, 19, 19),
+    (5, 11, 7, 13),
+    (0, 17, 2, 19),
   ];
   static const _forestMedium = [
-    (0, 0, 3, 7), (7, 0, 11, 2), (13, 0, 19, 1), (0, 10, 2, 14),
-    (4, 16, 7, 19), (13, 17, 19, 19), (10, 17, 11, 19),
+    (0, 0, 3, 7),
+    (7, 0, 11, 2),
+    (13, 0, 19, 1),
+    (0, 10, 2, 14),
+    (4, 16, 7, 19),
+    (13, 17, 19, 19),
+    (10, 17, 11, 19),
   ];
   static const _forestHard = [
-    (0, 0, 2, 5), (13, 0, 16, 1), (5, 17, 7, 19), (17, 17, 19, 19),
+    (0, 0, 2, 5),
+    (13, 0, 16, 1),
+    (5, 17, 7, 19),
+    (17, 17, 19, 19),
   ];
 }

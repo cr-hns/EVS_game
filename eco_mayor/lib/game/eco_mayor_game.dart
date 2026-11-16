@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../controllers/game_controller.dart';
 import '../data/buildings_data.dart';
 import '../data/map_generator.dart';
+import 'map_effects.dart';
 import 'terrain_painter.dart';
 import '../utils/constants.dart';
 
@@ -38,6 +39,8 @@ class EcoMayorFlameGame extends FlameGame
   math.Point<int>? _hoverCell;
 
   double _time = 0;
+  late final MapEffects _effects = MapEffects(_tile);
+  int _gameId = -1;
   final Map<String, Sprite> _sprites = {};
   final Paint _spritePaint = Paint()..filterQuality = FilterQuality.medium;
 
@@ -197,6 +200,13 @@ class EcoMayorFlameGame extends FlameGame
   void onTapUp(TapUpEvent event) {
     final cell = _cellAt(event.canvasPosition);
     if (cell == null) return;
+    _effects.tap(
+      Offset(
+        (event.canvasPosition.x - mapOffset.x) / zoom,
+        (event.canvasPosition.y - mapOffset.y) / zoom,
+      ),
+      _time,
+    );
     final b = controller.selectedBuilding;
     if (b != null && !controller.isDemolishMode) {
       // Centre multi-tile buildings on the tapped cell.
@@ -225,6 +235,11 @@ class EcoMayorFlameGame extends FlameGame
   void update(double dt) {
     super.update(dt);
     _time += dt;
+    if (controller.gameId != _gameId) {
+      _gameId = controller.gameId;
+      _effects.reset();
+    }
+    _effects.update(dt, controller.state.terrain);
   }
 
   @override
@@ -329,6 +344,10 @@ class EcoMayorFlameGame extends FlameGame
       }
     }
 
+    // Cars drive on the roads, under everything else.
+    _effects.syncBuildings(state.buildings, _time);
+    _effects.drawCars(canvas);
+
     // 2. Buildings (with a soft shadow), sorted top-to-bottom
     final placed = [...state.buildings]
       ..sort((a, b) => a.gridY.compareTo(b.gridY));
@@ -342,13 +361,37 @@ class EcoMayorFlameGame extends FlameGame
         t.width * _tile,
         t.height * _tile,
       );
-      canvas.drawRect(r.shift(const Offset(2, 2.5)), shadow);
-      _sprites[t.spritePath]?.render(
-        canvas,
-        position: Vector2(r.left, r.top),
-        size: Vector2(r.width, r.height),
-        overridePaint: _spritePaint,
-      );
+      final (sx, sy) = _effects.popScale(p.id, _time);
+      canvas.save();
+      // Pop in from the bottom centre (squash and stretch).
+      canvas.translate(r.center.dx, r.bottom);
+      canvas.scale(sx, sy);
+      canvas.translate(-r.center.dx, -r.bottom);
+      if (p.buildingTypeId != 'wind_turbine') {
+        canvas.drawRect(r.shift(const Offset(2, 2.5)), shadow);
+      }
+      if (p.buildingTypeId == 'wind_turbine') {
+        // Grass pad, then spinning blades.
+        canvas.save();
+        canvas.translate(r.center.dx, r.center.dy);
+        canvas.rotate(_time * 2.4 + p.gridX);
+        canvas.translate(-r.center.dx, -r.center.dy);
+        _sprites[t.spritePath]?.render(
+          canvas,
+          position: Vector2(r.left, r.top),
+          size: Vector2(r.width, r.height),
+          overridePaint: _spritePaint,
+        );
+        canvas.restore();
+      } else {
+        _sprites[t.spritePath]?.render(
+          canvas,
+          position: Vector2(r.left, r.top),
+          size: Vector2(r.width, r.height),
+          overridePaint: _spritePaint,
+        );
+      }
+      canvas.restore();
     }
 
     // 3. Smoke from polluters
@@ -363,6 +406,15 @@ class EcoMayorFlameGame extends FlameGame
         );
       }
     }
+
+    _effects.drawAmbient(
+      canvas,
+      state.buildings,
+      state.terrain,
+      _time,
+      waterClean: !waterBad,
+    );
+    _effects.drawFx(canvas, _time);
 
     // 4. Hover / placement preview (desktop)
     final hc = _hoverCell;
@@ -410,6 +462,8 @@ class EcoMayorFlameGame extends FlameGame
           ..strokeWidth = 1.5,
       );
     }
+
+    _effects.drawClouds(canvas, board, _time);
 
     // 5. Smog haze over the whole board when AQI is high
     if (m.aqi > 100.0) {

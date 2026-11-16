@@ -40,11 +40,11 @@ class PollutionMetrics {
   }
 
   Map<String, dynamic> toJson() => {
-        'aqi': aqi,
-        'waterPurity': waterPurity,
-        'soilHealth': soilHealth,
-        'noiseWaste': noiseWaste,
-      };
+    'aqi': aqi,
+    'waterPurity': waterPurity,
+    'soilHealth': soilHealth,
+    'noiseWaste': noiseWaste,
+  };
 
   factory PollutionMetrics.fromJson(Map<String, dynamic> json) =>
       PollutionMetrics(

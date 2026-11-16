@@ -1,4 +1,5 @@
 import 'dart:math';
+
 import '../models/city_state.dart';
 import '../models/pollution_metrics.dart';
 import '../models/advisor_message.dart';
@@ -91,10 +92,21 @@ class TurnProcessor {
     final nextFunds = max(0, current.funds + totalFundsDelta);
 
     // 2. Calculate Environmental Metrics with natural baseline dissipation
-    final targetAqi = (current.metrics.aqi + netAqiDelta * 0.35).clamp(10.0, 300.0);
-    final targetWater = (current.metrics.waterPurity + netWaterDelta * 0.35).clamp(5.0, 100.0);
-    final targetSoil = (current.metrics.soilHealth + netSoilDelta * 0.35).clamp(5.0, 100.0);
-    final targetNoiseWaste = (current.metrics.noiseWaste + netNoiseWasteDelta * 0.35).clamp(5.0, 100.0);
+    final targetAqi = (current.metrics.aqi + netAqiDelta * 0.35).clamp(
+      10.0,
+      300.0,
+    );
+    final targetWater = (current.metrics.waterPurity + netWaterDelta * 0.35)
+        .clamp(5.0, 100.0);
+    final targetSoil = (current.metrics.soilHealth + netSoilDelta * 0.35).clamp(
+      5.0,
+      100.0,
+    );
+    final targetNoiseWaste =
+        (current.metrics.noiseWaste + netNoiseWasteDelta * 0.35).clamp(
+          5.0,
+          100.0,
+        );
 
     final updatedMetrics = PollutionMetrics(
       aqi: targetAqi,
@@ -107,9 +119,12 @@ class TurnProcessor {
     // Ideal: AQI < 50, Water > 80, Soil > 75, Noise < 30
     double penalty = 0.0;
     if (updatedMetrics.aqi > 100) penalty += (updatedMetrics.aqi - 100) * 0.15;
-    if (updatedMetrics.waterPurity < 60) penalty += (60 - updatedMetrics.waterPurity) * 0.25;
-    if (updatedMetrics.soilHealth < 50) penalty += (50 - updatedMetrics.soilHealth) * 0.15;
-    if (updatedMetrics.noiseWaste > 50) penalty += (updatedMetrics.noiseWaste - 50) * 0.2;
+    if (updatedMetrics.waterPurity < 60)
+      penalty += (60 - updatedMetrics.waterPurity) * 0.25;
+    if (updatedMetrics.soilHealth < 50)
+      penalty += (50 - updatedMetrics.soilHealth) * 0.15;
+    if (updatedMetrics.noiseWaste > 50)
+      penalty += (updatedMetrics.noiseWaste - 50) * 0.2;
 
     double bonus = (greenBuildingCount * 2.0);
     if (hasHospital) bonus += 10.0;
@@ -137,8 +152,9 @@ class TurnProcessor {
     // 5. Check Victory / Defeat Conditions
     // Defeat only on sustained ecological collapse. Low funds or population
     // trigger advisor warnings instead of ending the game.
-    final nextCriticalDays =
-        updatedMetrics.isCritical() ? current.criticalDays + 1 : 0;
+    final nextCriticalDays = updatedMetrics.isCritical()
+        ? current.criticalDays + 1
+        : 0;
     bool isVictory = false;
     bool isDefeat = false;
     String? endReason;
@@ -152,21 +168,25 @@ class TurnProcessor {
         nextFunds > 1000 &&
         nextPop >= 100) {
       isVictory = true;
-      endReason =
-          'Outstanding Leadership! Your city has entered the sustainable Green Zone while maintaining economic stability!';
+      endReason = 'Outstanding Leadership! Your city has entered the sustainable Green Zone while maintaining economic stability!';
     }
 
     // 6. Advisor Intelligence
     final messages = <AdvisorMessage>[];
     if (nextCriticalDays > 0 && !isDefeat) {
-      messages.add(AdvisorDialogues.collapseWarning(
-          GameConstants.collapseDaysToLose - nextCriticalDays));
+      messages.add(
+        AdvisorDialogues.collapseWarning(
+          GameConstants.collapseDaysToLose - nextCriticalDays,
+        ),
+      );
     }
     if (updatedMetrics.aqi > 150) {
       messages.add(AdvisorDialogues.highAqiWarning(updatedMetrics.aqi));
     }
     if (updatedMetrics.waterPurity < 35) {
-      messages.add(AdvisorDialogues.dirtyWaterWarning(updatedMetrics.waterPurity));
+      messages.add(
+        AdvisorDialogues.dirtyWaterWarning(updatedMetrics.waterPurity),
+      );
     }
     if (nextFunds < 400) {
       messages.add(AdvisorDialogues.financialWarning(nextFunds));

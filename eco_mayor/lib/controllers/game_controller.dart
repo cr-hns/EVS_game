@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import '../models/city_state.dart';
 import '../models/pollution_metrics.dart';
 import '../models/building.dart';
@@ -36,7 +37,11 @@ class GameController extends ChangeNotifier {
     startNewGame('Eco City', 'medium');
   }
 
+  /// Bumped on every new game so the map can reset its animations.
+  int gameId = 0;
+
   void startNewGame(String name, String difficulty) {
+    gameId++;
     final map = MapGenerator.build(difficulty);
 
     int startFunds = 5000;
@@ -82,7 +87,10 @@ class GameController extends ChangeNotifier {
       gems: startGems,
       // Everyone who lives in the starting town's homes.
       population: map.buildings.fold<int>(
-          0, (sum, b) => sum + (BuildingsData.all[b.buildingTypeId]?.population ?? 0)),
+        0,
+        (sum, b) =>
+            sum + (BuildingsData.all[b.buildingTypeId]?.population ?? 0),
+      ),
       happiness: 60.0,
       metrics: initialMetrics,
       buildings: map.buildings,
@@ -137,7 +145,10 @@ class GameController extends ChangeNotifier {
       }
       final name = BuildingsData.all[target.buildingTypeId]?.name ?? 'Building';
       final kept = state.buildings.where((b) => b.id != target!.id).toList();
-      state = state.copyWith(funds: state.funds - demolishCost, buildings: kept);
+      state = state.copyWith(
+        funds: state.funds - demolishCost,
+        buildings: kept,
+      );
       showToast('$name demolished  -\$$demolishCost');
       return true;
     }
@@ -154,7 +165,10 @@ class GameController extends ChangeNotifier {
       return false;
     }
     if (state.gems < bType.gemCost) {
-      showToast('Need ${bType.gemCost - state.gems} more Eco-Gems', error: true);
+      showToast(
+        'Need ${bType.gemCost - state.gems} more Eco-Gems',
+        error: true,
+      );
       return false;
     }
     for (int y = 0; y < bType.height; y++) {
@@ -185,7 +199,9 @@ class GameController extends ChangeNotifier {
     );
     // Building on forest clears it: an immediate hit to air and soil.
     var cleared = 0;
-    final terrain = [for (final row in state.terrain) [...row]];
+    final terrain = [
+      for (final row in state.terrain) [...row],
+    ];
     for (int y = 0; y < bType.height; y++) {
       for (int x = 0; x < bType.width; x++) {
         if (terrain[gridY + y][gridX + x] == Terrain.forest) {
@@ -224,8 +240,9 @@ class GameController extends ChangeNotifier {
     final result = TurnProcessor.processTurn(state);
     lastResult = result;
     state = result.nextState;
-    activeAdvisorDialog =
-        result.messages.isNotEmpty ? result.messages.first : null;
+    activeAdvisorDialog = result.messages.isNotEmpty
+        ? result.messages.first
+        : null;
     if (result.isVictory || result.isDefeat) {
       gameOutcome = result;
       activeAdvisorDialog = null;

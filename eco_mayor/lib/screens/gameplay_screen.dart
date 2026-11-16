@@ -121,7 +121,20 @@ class _GameplayScreenState extends State<GameplayScreen> {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
-                  child: _advisorBox(),
+                  child: TweenAnimationBuilder<double>(
+                    key: ValueKey(c.activeAdvisorDialog),
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(milliseconds: 380),
+                    curve: Curves.easeOutBack,
+                    builder: (_, t, child) => Opacity(
+                      opacity: t.clamp(0.0, 1.0),
+                      child: Transform.translate(
+                        offset: Offset(0, -30 * (1 - t)),
+                        child: child,
+                      ),
+                    ),
+                    child: _advisorBox(),
+                  ),
                 ),
               ),
             ),
@@ -158,6 +171,24 @@ class _GameplayScreenState extends State<GameplayScreen> {
             ),
           ),
 
+          // "DAY N" banner after each End Day
+          if (s.turn > 1 && c.lastResult != null && !c.isGameOver)
+            Positioned(
+              // Middle of the map area, below where advisors appear.
+              top: (_topH + MediaQuery.of(context).size.height - _bottomH) / 2 + 10,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _DayBanner(
+                  key: ValueKey('day${s.turn}_${c.gameId}'),
+                  day: s.turn,
+                  funds: c.lastResult!.deltaFunds,
+                  aqi: c.lastResult!.deltaMetrics.aqi,
+                  water: c.lastResult!.deltaMetrics.waterPurity,
+                ),
+              ),
+            ),
+
           if (c.gameOutcome != null)
             Positioned.fill(child: _outcomeOverlay(context)),
         ],
@@ -176,8 +207,8 @@ class _GameplayScreenState extends State<GameplayScreen> {
         children: [
           Row(
             children: [
-              _iconButton(
-                Icons.arrow_back_rounded,
+              _imageButton(
+                'assets/images/ui/menu_back.png',
                 () => Navigator.of(context).maybePop(),
               ),
               const SizedBox(width: 6),
@@ -190,30 +221,20 @@ class _GameplayScreenState extends State<GameplayScreen> {
                 ),
               ),
               const SizedBox(width: 6),
-              _counter(
-                'ui/icon_funds.png',
-                '${s.funds}',
-                GameColors.gold,
-                flex: 5,
-              ),
+              _counter('ui/icon_funds.png', s.funds, GameColors.gold, flex: 5),
               const SizedBox(width: 4),
-              _counter(
-                'ui/icon_gems.png',
-                '${s.gems}',
-                GameColors.leaf,
-                flex: 3,
-              ),
+              _counter('ui/icon_gems.png', s.gems, GameColors.leaf, flex: 3),
               const SizedBox(width: 4),
               _counter(
                 'ui/icon_population.png',
-                '${s.population}',
+                s.population,
                 GameColors.sky,
                 flex: 4,
               ),
               const SizedBox(width: 4),
               _counter(
                 'ui/icon_happiness.png',
-                '${s.happiness.round()}',
+                s.happiness,
                 Colors.white,
                 flex: 4,
               ),
@@ -222,31 +243,26 @@ class _GameplayScreenState extends State<GameplayScreen> {
           const SizedBox(height: 7),
           Row(
             children: [
-              _meter(
-                'ui/icon_aqi.png',
-                'AIR',
-                m.aqi.toStringAsFixed(0),
-                1 - m.aqi / 300,
-              ),
+              _meter('ui/icon_aqi.png', 'AIR', m.aqi, 1 - m.aqi / 300),
               const SizedBox(width: 6),
               _meter(
                 'ui/icon_water.png',
                 'WATER',
-                '${m.waterPurity.round()}',
+                m.waterPurity,
                 m.waterPurity / 100,
               ),
               const SizedBox(width: 6),
               _meter(
                 'ui/icon_soil.png',
                 'SOIL',
-                '${m.soilHealth.round()}',
+                m.soilHealth,
                 m.soilHealth / 100,
               ),
               const SizedBox(width: 6),
               _meter(
                 'ui/icon_noise.png',
                 'WASTE',
-                m.noiseWaste.toStringAsFixed(0),
+                m.noiseWaste,
                 1 - m.noiseWaste / 100,
               ),
             ],
@@ -256,16 +272,16 @@ class _GameplayScreenState extends State<GameplayScreen> {
     );
   }
 
-  Widget _iconButton(IconData icon, VoidCallback onTap) {
+  Widget _imageButton(String asset, VoidCallback onTap) {
     return GameButton(
       onPressed: onTap,
       color: GameColors.woodLight,
       padding: const EdgeInsets.all(3),
-      child: Icon(icon, size: 18, color: GameColors.parchment),
+      child: Image.asset(asset, width: 20, height: 20),
     );
   }
 
-  Widget _counter(String icon, String value, Color color, {int flex = 1}) {
+  Widget _counter(String icon, num value, Color color, {int flex = 1}) {
     return Expanded(
       flex: flex,
       child: GameSlot(
@@ -284,7 +300,7 @@ class _GameplayScreenState extends State<GameplayScreen> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: GameText(value, size: 14, color: color),
+                child: AnimatedNumber(value: value, size: 14, color: color),
               ),
             ),
           ],
@@ -293,7 +309,7 @@ class _GameplayScreenState extends State<GameplayScreen> {
     );
   }
 
-  Widget _meter(String icon, String label, String value, double goodness) {
+  Widget _meter(String icon, String label, num value, double goodness) {
     final col = healthColor(goodness);
     return Expanded(
       child: Column(
@@ -316,7 +332,7 @@ class _GameplayScreenState extends State<GameplayScreen> {
                   maxLines: 1,
                 ),
               ),
-              GameText(value, size: 11, color: col),
+              AnimatedNumber(value: value, size: 11, color: col),
             ],
           ),
           const SizedBox(height: 3),
@@ -914,6 +930,108 @@ class _ToastState extends State<_Toast> with SingleTickerProviderStateMixin {
           fill: widget.error ? GameColors.dangerDark : GameColors.leafDark,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           child: GameText(widget.text, size: 14),
+        ),
+      ),
+    );
+  }
+}
+
+/// Wooden "DAY N" sign that drops in after End Day with the day's changes,
+/// then fades away.
+class _DayBanner extends StatefulWidget {
+  final int day;
+  final int funds;
+  final double aqi;
+  final double water;
+
+  const _DayBanner({
+    super.key,
+    required this.day,
+    required this.funds,
+    required this.aqi,
+    required this.water,
+  });
+
+  @override
+  State<_DayBanner> createState() => _DayBannerState();
+}
+
+class _DayBannerState extends State<_DayBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2200),
+  )..forward();
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  Widget _chip(String icon, String text, bool good) => GameSlot(
+    glow: good ? GameColors.leafDark : GameColors.dangerDark,
+    padding: const EdgeInsets.fromLTRB(3, 1, 6, 1),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset('assets/images/ui/$icon', width: 16, height: 16),
+        const SizedBox(width: 3),
+        GameText(
+          text,
+          size: 12,
+          color: good ? GameColors.leaf : const Color(0xFFFF7A6B),
+        ),
+      ],
+    ),
+  );
+
+  String _signed(num v) => '${v >= 0 ? '+' : '-'}${v.abs().round()}';
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _a,
+        builder: (_, child) {
+          final t = _a.value;
+          final drop = Curves.elasticOut.transform((t / 0.35).clamp(0.0, 1.0));
+          final fade = t < 0.8 ? 1.0 : (1 - t) / 0.2;
+          return Opacity(
+            opacity: fade.clamp(0.0, 1.0),
+            child: Transform.translate(
+              offset: Offset(0, -40 * (1 - drop)),
+              child: Transform.scale(scale: 0.6 + 0.4 * drop, child: child),
+            ),
+          );
+        },
+        child: GamePanel(
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 9),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GameText('DAY ${widget.day}', size: 26, color: GameColors.gold),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _chip(
+                    'icon_funds.png',
+                    '\$${_signed(widget.funds)}',
+                    widget.funds >= 0,
+                  ),
+                  const SizedBox(width: 5),
+                  _chip('icon_aqi.png', _signed(widget.aqi), widget.aqi <= 0),
+                  const SizedBox(width: 5),
+                  _chip(
+                    'icon_water.png',
+                    _signed(widget.water),
+                    widget.water >= 0,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

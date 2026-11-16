@@ -12,7 +12,8 @@ class CityState {
   final double happiness; // 0 - 100%
   final PollutionMetrics metrics;
   final List<PlacedBuilding> buildings;
-  final List<List<String>> terrain; // 20x20 terrain tile IDs ('grass', 'water', etc.)
+  final List<List<String>>
+  terrain; // 20x20 terrain tile IDs ('grass', 'water', etc.)
   final int criticalDays; // consecutive days spent in critical pollution state
   final bool infiniteMode; // true after the player wins and keeps building
 
@@ -80,37 +81,36 @@ class CityState {
   }
 
   Map<String, dynamic> toJson() => {
-        'cityName': cityName,
-        'difficulty': difficulty,
-        'turn': turn,
-        'funds': funds,
-        'gems': gems,
-        'population': population,
-        'happiness': happiness,
-        'metrics': metrics.toJson(),
-        'buildings': buildings.map((b) => b.toJson()).toList(),
-        'terrain': terrain,
-        'criticalDays': criticalDays,
-        'infiniteMode': infiniteMode,
-      };
+    'cityName': cityName,
+    'difficulty': difficulty,
+    'turn': turn,
+    'funds': funds,
+    'gems': gems,
+    'population': population,
+    'happiness': happiness,
+    'metrics': metrics.toJson(),
+    'buildings': buildings.map((b) => b.toJson()).toList(),
+    'terrain': terrain,
+    'criticalDays': criticalDays,
+    'infiniteMode': infiniteMode,
+  };
 
   factory CityState.fromJson(Map<String, dynamic> json) => CityState(
-        cityName: json['cityName'] as String,
-        difficulty: json['difficulty'] as String,
-        turn: json['turn'] as int,
-        funds: json['funds'] as int,
-        gems: json['gems'] as int,
-        population: json['population'] as int,
-        happiness: (json['happiness'] as num).toDouble(),
-        metrics:
-            PollutionMetrics.fromJson(json['metrics'] as Map<String, dynamic>),
-        buildings: (json['buildings'] as List)
-            .map((b) => PlacedBuilding.fromJson(b as Map<String, dynamic>))
-            .toList(),
-        terrain: (json['terrain'] as List)
-            .map((row) => (row as List).map((cell) => cell as String).toList())
-            .toList(),
-        criticalDays: (json['criticalDays'] as int?) ?? 0,
-        infiniteMode: (json['infiniteMode'] as bool?) ?? false,
-      );
+    cityName: json['cityName'] as String,
+    difficulty: json['difficulty'] as String,
+    turn: json['turn'] as int,
+    funds: json['funds'] as int,
+    gems: json['gems'] as int,
+    population: json['population'] as int,
+    happiness: (json['happiness'] as num).toDouble(),
+    metrics: PollutionMetrics.fromJson(json['metrics'] as Map<String, dynamic>),
+    buildings: (json['buildings'] as List)
+        .map((b) => PlacedBuilding.fromJson(b as Map<String, dynamic>))
+        .toList(),
+    terrain: (json['terrain'] as List)
+        .map((row) => (row as List).map((cell) => cell as String).toList())
+        .toList(),
+    criticalDays: (json['criticalDays'] as int?) ?? 0,
+    infiniteMode: (json['infiniteMode'] as bool?) ?? false,
+  );
 }

@@ -16,7 +16,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/coal_plant.png',
-      description: 'Generates power & revenue, but heavily emits sulfur dioxide & CO2.',
+      description:
+          'Generates power & revenue, but heavily emits sulfur dioxide & CO2.',
     ),
     'factory': BuildingType(
       id: 'factory',
@@ -31,7 +32,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/factory.png',
-      description: 'Creates jobs and steady taxes, produces toxic waste and smoke.',
+      description:
+          'Creates jobs and steady taxes, produces toxic waste and smoke.',
     ),
     'oil_refinery': BuildingType(
       id: 'oil_refinery',
@@ -46,7 +48,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/oil_refinery.png',
-      description: 'Massive economic boost; severe risk of hydrocarbon water runoff.',
+      description:
+          'Massive economic boost; severe risk of hydrocarbon water runoff.',
     ),
     'landfill': BuildingType(
       id: 'landfill',
@@ -79,7 +82,8 @@ class BuildingsData {
       width: 1,
       height: 1,
       spritePath: 'buildings/house.png',
-      description: 'Provides shelter for citizens and modest residential taxes.',
+      description:
+          'Provides shelter for citizens and modest residential taxes.',
     ),
     'apartment': BuildingType(
       id: 'apartment',
@@ -95,7 +99,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/apartment.png',
-      description: 'High-density urban living. Increases city workforce significantly.',
+      description:
+          'High-density urban living. Increases city workforce significantly.',
     ),
 
     // Green / Eco
@@ -160,7 +165,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/water_treatment.png',
-      description: 'Removes industrial effluents and heavy metals from city water.',
+      description:
+          'Removes industrial effluents and heavy metals from city water.',
     ),
     'recycling_center': BuildingType(
       id: 'recycling_center',
@@ -191,7 +197,8 @@ class BuildingsData {
       width: 1,
       height: 1,
       spritePath: 'buildings/composting.png',
-      description: 'Converts organic household food waste into rich humus fertilizer.',
+      description:
+          'Converts organic household food waste into rich humus fertilizer.',
     ),
     'green_roof': BuildingType(
       id: 'green_roof',
@@ -208,7 +215,8 @@ class BuildingsData {
       width: 1,
       height: 1,
       spritePath: 'buildings/green_roof.png',
-      description: 'Rooftop vegetation reduces urban heat islands and filters air.',
+      description:
+          'Rooftop vegetation reduces urban heat islands and filters air.',
     ),
     'sewage_treatment': BuildingType(
       id: 'sewage_treatment',
@@ -224,7 +232,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/sewage_treatment.png',
-      description: 'Biological purification prevents harmful eutrophication in rivers.',
+      description:
+          'Biological purification prevents harmful eutrophication in rivers.',
     ),
 
     // Infrastructure
@@ -241,7 +250,8 @@ class BuildingsData {
       width: 1,
       height: 1,
       spritePath: 'buildings/road_cross.png',
-      description: 'Enables transportation and unlocks city district connectivity.',
+      description:
+          'Enables transportation and unlocks city district connectivity.',
     ),
     'hospital': BuildingType(
       id: 'hospital',
@@ -256,7 +266,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/hospital.png',
-      description: 'Protects citizens from respiratory illness caused by poor AQI.',
+      description:
+          'Protects citizens from respiratory illness caused by poor AQI.',
     ),
     'school': BuildingType(
       id: 'school',
@@ -271,7 +282,8 @@ class BuildingsData {
       width: 2,
       height: 2,
       spritePath: 'buildings/school.png',
-      description: 'Educates future eco-citizens and increases Eco-Gem earnings.',
+      description:
+          'Educates future eco-citizens and increases Eco-Gem earnings.',
     ),
     'ev_station': BuildingType(
       id: 'ev_station',
@@ -287,7 +299,8 @@ class BuildingsData {
       width: 1,
       height: 1,
       spritePath: 'buildings/ev_station.png',
-      description: 'Promotes green electric mobility, lowering combustion emissions.',
+      description:
+          'Promotes green electric mobility, lowering combustion emissions.',
     ),
   };
 }

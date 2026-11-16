@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Shared look for EcoMayor: chunky pixel panels, outlined pixel-font text,
@@ -282,10 +284,16 @@ class GameMeter extends StatelessWidget {
         borderRadius: BorderRadius.circular(2),
         border: Border.all(color: GameColors.ink, width: 1),
       ),
-      child: Align(
-        alignment: Alignment.centerLeft,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: fraction.clamp(0.0, 1.0)),
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeOutCubic,
+        builder: (_, f, child) => Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(widthFactor: f, child: child),
+        ),
         child: FractionallySizedBox(
-          widthFactor: fraction.clamp(0.0, 1.0),
+          widthFactor: 1,
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(1),
@@ -308,4 +316,71 @@ Color healthColor(double goodness) {
   if (goodness >= 0.66) return GameColors.leaf;
   if (goodness >= 0.4) return GameColors.gold;
   return GameColors.danger;
+}
+
+/// A number that counts to its new value and does a little pop when it
+/// changes, coloured green/red for a moment to show which way it went.
+class AnimatedNumber extends StatefulWidget {
+  final num value;
+  final double size;
+  final Color color;
+
+  const AnimatedNumber({
+    super.key,
+    required this.value,
+    this.size = 14,
+    this.color = Colors.white,
+  });
+
+  @override
+  State<AnimatedNumber> createState() => _AnimatedNumberState();
+}
+
+class _AnimatedNumberState extends State<AnimatedNumber>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 750),
+  );
+  late double _from = widget.value.toDouble();
+  late double _to = widget.value.toDouble();
+
+  @override
+  void didUpdateWidget(AnimatedNumber old) {
+    super.didUpdateWidget(old);
+    if (widget.value.round() != old.value.round()) {
+      _from = _current;
+      _to = widget.value.toDouble();
+      _a.forward(from: 0);
+    }
+  }
+
+  double get _current =>
+      _from + (_to - _from) * Curves.easeOutCubic.transform(_a.value);
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _a,
+      builder: (_, _) {
+        final t = _a.value;
+        final pop = _a.isAnimating ? math.sin(t * math.pi) : 0.0;
+        final flash = _to > _from ? GameColors.leaf : const Color(0xFFFF7A6B);
+        return Transform.scale(
+          scale: 1 + 0.18 * pop,
+          child: GameText(
+            '${_current.round()}',
+            size: widget.size,
+            color: Color.lerp(widget.color, flash, pop)!,
+          ),
+        );
+      },
+    );
+  }
 }

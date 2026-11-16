@@ -14,7 +14,7 @@ Run from the repo root:
 import numpy as np
 from PIL import Image
 
-from slice_sheets import OUT, RAW, find_items, strip_frame
+from slice_sheets import OUT, RAW, find_items, knock_out, square, strip_frame
 
 NEW = RAW / "new"
 SIZE = 128
@@ -108,6 +108,26 @@ def main():
             done.add(name)
             save(knock_out_grass(rimg), name)
     print(f"{len(done)} road masks")
+
+    # Menu icons: free-standing on white, so cut out with transparency.
+    icons = ["book", "earth", "exit", "back", "sapling", "smoggy_town", "burning_factory",
+             "star", "sound_on", "sound_off", "save", "settings"]
+    img = Image.open(NEW / "menu_icons.jpg").convert("RGB")
+    boxes = find_items(img, "white", 100, dilate=10)
+    print(f"menu_icons.jpg: {len(boxes)} icons")
+    assert len(boxes) == len(icons), boxes
+    for name, (x0, y0, x1, y1) in zip(icons, boxes):
+        # Drop a text label: a short band of ink below a blank gap.
+        ink = (np.asarray(img.crop((x0, y0, x1, y1))).min(axis=2) < 200).any(axis=1)
+        rows = np.where(ink)[0]
+        gaps = [i for i in range(1, len(rows)) if rows[i] - rows[i - 1] > 4]
+        if gaps and rows[-1] - rows[gaps[-1]] < 45:
+            y1 = y0 + rows[gaps[-1] - 1] + 2
+            cols = np.where((np.asarray(img.crop((x0, y0, x1, y1))).min(axis=2) < 200).any(axis=0))[0]
+            x0, x1 = x0 + cols[0], x0 + cols[-1] + 1
+        crop = img.crop((x0 - 6, y0 - 6, x1 + 6, y1 + 6))
+        square(knock_out(crop, (255, 255, 255), 30), 96).save(OUT / "ui" / f"menu_{name}.png")
+        print(f"  ui/menu_{name}.png")
 
 
 if __name__ == "__main__":
