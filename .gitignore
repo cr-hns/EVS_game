@@ -24,3 +24,6 @@
 
 # Raw generation sheets (keep git repo clean and light)
 raw_sheets/slices/
+
+# Local build outputs for the demo
+dist/
