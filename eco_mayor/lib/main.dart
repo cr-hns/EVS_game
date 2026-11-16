@@ -39,7 +39,7 @@ class MainMenuScreen extends StatelessWidget {
             fit: BoxFit.cover,
           ),
           Container(
-            color: Colors.black.withOpacity(0.65),
+            color: Colors.black.withValues(alpha: 0.55),
           ),
           SafeArea(
             child: Center(
@@ -48,22 +48,15 @@ class MainMenuScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Image.asset(
-                      'assets/images/misc/logo.png',
-                      width: 140,
-                      height: 140,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'ECO MAYOR',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2.0,
-                        color: Colors.greenAccent,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Image.asset(
+                        'assets/images/misc/logo.png',
+                        fit: BoxFit.contain,
+                        semanticLabel: 'ECO MAYOR',
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     const Text(
                       'Environmental City Simulation',
                       style: TextStyle(

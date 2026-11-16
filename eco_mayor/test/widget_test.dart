@@ -4,6 +4,6 @@ import 'package:eco_mayor/main.dart';
 void main() {
   testWidgets('EcoMayor builds successfully', (WidgetTester tester) async {
     await tester.pumpWidget(const EcoMayorApp());
-    expect(find.text('ECO MAYOR'), findsOneWidget);
+    expect(find.text('Environmental City Simulation'), findsOneWidget);
   });
 }
